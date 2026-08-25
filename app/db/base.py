@@ -284,9 +284,23 @@ class PostgresDatabase(Database):
         self._psycopg = psycopg
 
     def connect(self) -> Connection:
-        raw = self._psycopg.connect(self.dsn, autocommit=False)
-        with raw.cursor() as cursor:
-            cursor.execute("SET TIME ZONE 'UTC'")
+        """Open a connection in autocommit mode.
+
+        Autocommit is essential, not incidental. With psycopg's default
+        (``autocommit=False``) the driver opens a transaction implicitly
+        before the first statement, so the explicit ``BEGIN ISOLATION LEVEL
+        SERIALIZABLE`` below would arrive *inside* an existing transaction.
+        PostgreSQL answers that with ``WARNING: there is already a
+        transaction in progress`` and ignores it -- leaving the preemption
+        transaction silently running at READ COMMITTED, where ``FOR UPDATE``
+        locks only rows that already exist and two requests for the same free
+        slot can both commit.
+
+        In autocommit mode nothing is wrapped implicitly, so the explicit
+        BEGIN below genuinely sets the isolation level.
+        """
+        raw = self._psycopg.connect(self.dsn, autocommit=True)
+        raw.execute("SET TIME ZONE 'UTC'")
         return Connection(raw, POSTGRES)
 
     def _is_retryable(self, exc: BaseException) -> bool:
@@ -295,14 +309,17 @@ class PostgresDatabase(Database):
 
     @contextmanager
     def _begin(self, conn: Connection) -> Iterator[Connection]:
+        # Explicit SQL rather than psycopg's transaction context manager, so
+        # the isolation level is stated in one obvious place and matches the
+        # SQLite path's shape. Safe only because connect() uses autocommit.
         conn.raw.execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
         try:
             yield conn
         except BaseException:
-            conn.raw.rollback()
+            conn.raw.execute("ROLLBACK")
             raise
         else:
-            conn.raw.commit()
+            conn.raw.execute("COMMIT")
 
     def _release(self, conn: Connection) -> None:
         conn.raw.close()
