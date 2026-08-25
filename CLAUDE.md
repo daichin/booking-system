@@ -4,11 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-This repo currently contains **one file**: `meeting_room_booking_spec.md` — a locked v1.0 build specification for a meeting-room booking system with priority-based preemption. No code, no `package.json`, no git repository yet.
+Task 0 has landed. **Read `CONTRACT.md` first** — it is the locked output of spec §11 Task 0 and fixes the stack, module ownership, service interfaces, and the HTTP contract. Do not change what it specifies without raising it.
 
-**The stack is not chosen.** Spec §11 Task 0 (Foundation) must complete first: pick and justify a stack against the §2 constraints, write DB migrations for §4, seed §5 settings, and produce `CONTRACT.md` (the typed API contract). Spec §11 states no other task may begin until `CONTRACT.md` exists.
+The stack: **Python 3.13, standard library only** in development and test. Production adds exactly two packages (`psycopg[binary]`, `gunicorn` — see `requirements.txt`). Neon Postgres, Render hosting, Brevo email, GitHub Actions for deploy and cron.
 
-**When Task 0 lands, replace this section** with the real build / test / lint / migrate / single-test commands.
+### Commands
+
+```bash
+python -m unittest discover -s tests -t .        # whole suite
+python -m unittest tests.test_preemption -v      # one module
+python -m unittest tests.test_preemption.LevelRuleTests.test_c1_higher_level_preempts_lower
+python -m compileall -q app tests manage.py serve.py   # lint
+
+python serve.py                  # run locally on SQLite; no setup required
+python manage.py migrate         # migrate + seed settings, admin, example rooms
+python manage.py check-secrets   # names any missing deploy secret
+python manage.py health --url https://HOST/api/health --retries 20
+```
+
+The suite needs no setup and no network: each test gets a fresh temporary SQLite database. Set `TEST_DATABASE_URL` to run the *same* suite against a real Postgres (each test gets its own schema); CI does this so the production backend is genuinely exercised.
+
+### Layout
+
+`app/db/` backends and migrations · `app/services/` all business logic · `app/web/` WSGI layer, `pages/` per area · `app/i18n/` zh-TW strings · `tests/`.
+
+Acceptance coverage is enforced: `tests/test_acceptance.py` fails the build if any spec §12 scenario loses the test named after it.
 
 ## The spec is the source of truth
 
