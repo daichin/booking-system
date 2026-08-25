@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 venv/
 
+# Claude Code 的工作目錄。git worktree 的簽出位置就在這裡面，
+# 它本身不該被當成專案檔案提交進版本庫。
+.claude/
+
 # Local development database (SQLite backend only; production is Postgres)
 *.sqlite3
 *.sqlite3-journal
