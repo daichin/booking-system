@@ -240,6 +240,25 @@ def _attempt_send(
     return None
 
 
+def _mark_preemption_notified(db: Database, row: dict[str, Any]) -> None:
+    """Stamp ``preemption_log.notification_sent_at`` once E5 actually goes out.
+
+    Spec §4.5 carries this column, and it is only meaningful at the moment of
+    a successful send -- enqueuing is not notifying.
+    """
+    if row["type"] != "E5" or not row["related_booking_id"]:
+        return
+
+    def work(conn: Connection) -> None:
+        conn.execute(
+            "UPDATE preemption_log SET notification_sent_at = ?"
+            " WHERE victim_booking_id = ? AND notification_sent_at IS NULL",
+            (now_utc(), row["related_booking_id"]),
+        )
+
+    db.run_in_transaction(work)
+
+
 def _send_row(
     db: Database,
     row: dict[str, Any],
@@ -261,6 +280,7 @@ def _send_row(
     outcome = _attempt_send(db, row, event, transport)
     if outcome is True:
         sent_today[0] += 1
+        _mark_preemption_notified(db, row)
         return "sent"
     if outcome is False:
         return "failed"
@@ -289,6 +309,12 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
         for event in events:
             row_id = models.new_id()
             subject = email_templates.render(event.kind, event.context).subject
+            # Each insert gets its own savepoint. On Postgres a failed
+            # statement poisons the whole transaction, so simply catching the
+            # unique violation and carrying on would make the *next* insert
+            # raise InFailedSqlTransaction. Rolling back to the savepoint
+            # leaves the transaction usable on both backends.
+            conn.execute("SAVEPOINT email_enqueue")
             try:
                 conn.execute(
                     "INSERT INTO email_log (id, to_email, type, subject, status,"
@@ -305,10 +331,13 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
                     ),
                 )
             except Exception as exc:  # noqa: BLE001 - narrowed immediately below
+                conn.execute("ROLLBACK TO SAVEPOINT email_enqueue")
+                conn.execute("RELEASE SAVEPOINT email_enqueue")
                 if event.dedupe_key and _is_unique_violation(exc):
                     results.append(None)
                     continue
                 raise
+            conn.execute("RELEASE SAVEPOINT email_enqueue")
             results.append(row_id)
         return results
 

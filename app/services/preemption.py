@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from app.db.base import Connection, Database
+from app.db.base import Connection, Database, DatabaseError
 from app.errors import (
     AVAILABLE,
     BLOCKED,
@@ -339,11 +339,20 @@ def _displace(
     """Mark victims preempted, log it, and drop their pending reminders."""
     now = now_utc()
     for victim in victims:
-        conn.execute(
+        displaced = conn.execute(
             "UPDATE bookings SET status = ?, preempted_by_booking_id = ?,"
             " cancelled_at = ?, updated_at = ? WHERE id = ? AND status = ?",
             (PREEMPTED, winner.id, now, now, victim.booking.id, CONFIRMED),
-        )
+        ).rowcount
+        if displaced != 1:
+            # The victim stopped being 'confirmed' between the locked read and
+            # this update. The row locks taken above are supposed to make that
+            # impossible, so fail loudly and roll back rather than writing a
+            # preemption_log entry for a displacement that did not happen.
+            raise DatabaseError(
+                f"victim booking {victim.booking.id} was not displaced "
+                f"({displaced} rows updated); the overlap lock did not hold"
+            )
         conn.execute(
             "INSERT INTO preemption_log (id, victim_booking_id, winner_booking_id,"
             " victim_user_id, winner_user_id, victim_level, winner_level, room_id,"
