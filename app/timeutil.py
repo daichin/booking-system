@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta, timezone
+from typing import Callable
 
 UTC = timezone.utc
 TAIPEI = timezone(timedelta(hours=8), "Asia/Taipei")
@@ -25,8 +26,28 @@ _ISO_RE = re.compile(
 )
 
 
+#: Overridable clock. Production leaves this ``None``; tests install a fixed
+#: clock so that rules expressed relative to "now" -- the preemption
+#: protection window above all -- are deterministic instead of depending on
+#: what time of day the suite happens to run.
+_clock: "Callable[[], datetime] | None" = None
+
+
+def set_clock(clock: "Callable[[], datetime] | None") -> None:
+    """Install (or clear, with ``None``) the clock used by :func:`now_utc`."""
+    global _clock
+    _clock = clock
+
+
 def now_utc() -> datetime:
-    """Current time as an aware UTC datetime."""
+    """Current time as an aware UTC datetime.
+
+    Every module reads the clock through this function, so installing a test
+    clock affects the whole application even where the name was imported
+    directly.
+    """
+    if _clock is not None:
+        return ensure_utc(_clock())
     return datetime.now(UTC)
 
 

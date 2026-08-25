@@ -7,11 +7,30 @@ this package should contain a user-facing sentence.
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
+
 from app.i18n import zh_TW
 
 DEFAULT_LOCALE = "zh-TW"
 
-_CATALOGUES = {"zh-TW": zh_TW.STRINGS}
+
+def _load_zh_tw() -> dict[str, str]:
+    """Merge the main catalogue with any ``zh_TW_<area>`` fragments.
+
+    Fragments exist so that tasks built in parallel do not all edit one file.
+    They are folded back into ``zh_TW.py`` before release, leaving the single
+    catalogue the spec asks for.
+    """
+    merged = dict(zh_TW.STRINGS)
+    for module in pkgutil.iter_modules(__path__):
+        if module.name.startswith("zh_TW_"):
+            fragment = importlib.import_module(f"{__name__}.{module.name}")
+            merged.update(getattr(fragment, "STRINGS", {}))
+    return merged
+
+
+_CATALOGUES = {"zh-TW": _load_zh_tw()}
 
 
 def t(key: str, /, locale: str = DEFAULT_LOCALE, **params: object) -> str:

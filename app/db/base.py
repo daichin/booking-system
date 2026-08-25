@@ -21,9 +21,11 @@ SQL is written once using ``?`` placeholders and translated for Postgres.
 
 from __future__ import annotations
 
+import random
 import re
 import sqlite3
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -150,7 +152,7 @@ class Database:
         booking that still exists.
         """
         last_error: BaseException | None = None
-        for _ in range(retries):
+        for attempt in range(retries):
             conn = self.connect()
             try:
                 with self._begin(conn) as tx:
@@ -161,6 +163,9 @@ class Database:
                 last_error = exc
             finally:
                 self._release(conn)
+            # Back off before retrying so two contending writers do not simply
+            # collide again immediately. Jitter keeps them from resynchronising.
+            time.sleep(min(0.05 * (2**attempt), 0.5) * (0.5 + random.random()))
         raise DatabaseError(
             f"transaction failed after {retries} serialisation conflicts"
         ) from last_error
@@ -182,6 +187,11 @@ class SqliteDatabase(Database):
     def __init__(self, path: str = ":memory:") -> None:
         self.path = path
         self._local = threading.local()
+        # Every connection handed out, so close() can release them all. On
+        # Windows a file-backed database cannot be deleted while any handle
+        # is still open, which matters for the test harness.
+        self._all: list[sqlite3.Connection] = []
+        self._all_lock = threading.Lock()
         # An in-memory database lives only as long as its connection, so a
         # shared cache URI is used to give every thread the same database.
         self._uri = path.startswith("file:")
@@ -207,7 +217,11 @@ class SqliteDatabase(Database):
         raw.execute("PRAGMA foreign_keys = ON")
         raw.execute("PRAGMA busy_timeout = 30000")
         if not self._uri:
+            # WAL lets readers run alongside a writer, and makes busy_timeout
+            # actually wait rather than failing fast.
             raw.execute("PRAGMA journal_mode = WAL")
+        with self._all_lock:
+            self._all.append(raw)
         return raw
 
     def connect(self) -> Connection:
@@ -236,10 +250,16 @@ class SqliteDatabase(Database):
             conn.raw.execute("COMMIT")
 
     def close(self) -> None:
-        raw = getattr(self._local, "raw", None)
-        if raw is not None:
-            raw.close()
-            self._local.raw = None
+        """Close every connection this database has handed out."""
+        with self._all_lock:
+            connections, self._all = self._all, []
+        for raw in connections:
+            try:
+                raw.close()
+            except sqlite3.Error:  # pragma: no cover - already broken
+                pass
+        self._local = threading.local()
+        self._keepalive = None
 
 
 class PostgresDatabase(Database):

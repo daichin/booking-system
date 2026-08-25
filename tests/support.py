@@ -8,6 +8,9 @@ task's code is mid-change.
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -22,9 +25,16 @@ from app.timeutil import combine_taipei, local_date, now_utc
 security.configure(n=1 << 10)
 
 
-def make_db() -> Database:
-    """A migrated, seeded, empty database."""
-    db = create_database(None)
+def make_db(path: str | None = None) -> Database:
+    """A migrated, seeded, empty database.
+
+    Backed by a temporary file rather than ``:memory:``. SQLite's shared-cache
+    in-memory mode reports contention as ``SQLITE_LOCKED``, which
+    ``busy_timeout`` does not cover, so concurrent writers would fail instead
+    of queueing -- exactly the behaviour the preemption concurrency tests need
+    to exercise for real.
+    """
+    db = create_database(f"sqlite://{path}" if path else None)
 
     def bootstrap(conn: Connection) -> None:
         migrate(conn)
@@ -48,8 +58,32 @@ class AppTestCase(unittest.TestCase):
     """Base class providing a database and row factories."""
 
     def setUp(self) -> None:
-        self.db = make_db()
-        self.addCleanup(self.db.close)
+        self._tmpdir = tempfile.mkdtemp(prefix="booking-test-")
+        self.db = make_db(os.path.join(self._tmpdir, "test.sqlite3"))
+        self.addCleanup(self._drop_database)
+
+    def _drop_database(self) -> None:
+        self.db.close()
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    # --- clock ------------------------------------------------------------
+
+    def freeze(self, moment: datetime) -> datetime:
+        """Pin the application clock for the rest of this test.
+
+        Rules expressed relative to "now" -- the preemption protection window
+        especially -- would otherwise pass or fail depending on the hour the
+        suite runs at. Automatically restored on teardown.
+        """
+        from app import timeutil
+
+        timeutil.set_clock(lambda: moment)
+        self.addCleanup(timeutil.set_clock, None)
+        return moment
+
+    def freeze_at(self, days_ahead: int, hour: int, minute: int = 0) -> datetime:
+        """Freeze the clock at a Taipei wall-clock time."""
+        return self.freeze(taipei_at(days_ahead, hour, minute))
 
     # --- access -----------------------------------------------------------
 
