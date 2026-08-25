@@ -1,0 +1,39 @@
+# Render free web service (spec §10, CONTRACT.md §1).
+#
+# This is an "Infrastructure as Code" blueprint for reference: the owner can
+# either click "New +" -> "Blueprint" on Render and point it at this repo, or
+# create the web service by hand from the dashboard (SETUP.md walks through
+# the manual path, since it does not require understanding this file). Either
+# way the resulting service must be configured exactly like this: a free
+# Python web service that runs gunicorn against the WSGI factory, gets its
+# secrets from the environment, and is deployed only through the deploy hook
+# that GitHub Actions calls -- never Render's own auto-deploy-on-push, which
+# would violate spec C3 (deploy is a single GitHub Actions button, not a push).
+services:
+  - type: web
+    name: meeting-room-booking
+    runtime: python
+    plan: free
+    autoDeploy: false
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "app.web.app:build_wsgi_app()" --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: EMAIL_PROVIDER_API_KEY
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.13.1

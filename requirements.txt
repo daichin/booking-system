@@ -1,0 +1,10 @@
+# Production-only dependencies (Task 7 / spec §10).
+#
+# The application itself is written against the Python 3.13 standard library
+# only (see CONTRACT.md §1) -- nothing here is required to run the test suite
+# or `serve.py` locally with the SQLite backend. These two packages are
+# installed solely by the deploy workflow / Render build step, because
+# production talks to a real Postgres database over `gunicorn`.
+
+psycopg[binary]==3.2.3
+gunicorn==23.0.0
