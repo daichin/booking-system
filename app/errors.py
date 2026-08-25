@@ -116,3 +116,11 @@ INVALID_STATUS_TRANSITION = "INVALID_STATUS_TRANSITION"
 ROOM_HAS_BOOKINGS = "ROOM_HAS_BOOKINGS"
 INVALID_SETTING = "INVALID_SETTING"
 CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
+
+# --- Accounts, added by Task 1 -----------------------------------------------
+# ACCOUNT_EXISTS: an admin-issued invitation or invite-acceptance targets an
+#   email that already has a user row. (Self-registration never raises this --
+#   spec §6.1 requires a generic response there instead, see accounts.register.)
+# INVITATION_NOT_FOUND: revoke_invitation() referenced an unknown token id.
+ACCOUNT_EXISTS = "ACCOUNT_EXISTS"
+INVITATION_NOT_FOUND = "INVITATION_NOT_FOUND"

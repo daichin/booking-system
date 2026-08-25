@@ -21,6 +21,18 @@ STRINGS: dict[str, str] = {
     "common.loading": "載入中…",
     "common.none": "無",
 
+    # --- navigation and page shell -----------------------------------------
+    "nav.login": "登入",
+    "nav.register": "註冊",
+    "nav.logout": "登出",
+    "nav.day": "當日總覽",
+    "nav.week": "單室週表",
+    "nav.my_bookings": "我的預約",
+    "nav.admin": "管理後台",
+    "nav.home": "回首頁",
+    "nav.skip": "跳到主要內容",
+    "error.page_title": "發生問題",
+
     # --- booking validation, spec §6.5 -------------------------------------
     "error.NOT_ACTIVE": "您的帳號尚未通過管理員審核，目前無法預約。",
     "error.ROOM_INACTIVE": "此會議室已停用，無法預約。",
