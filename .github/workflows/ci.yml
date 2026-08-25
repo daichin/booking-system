@@ -1,0 +1,72 @@
+# 持續整合
+#
+# 跑兩次同一套測試：
+#   1. SQLite   -- 開發與本機使用的後端，不需要任何設定。
+#   2. Postgres -- 正式環境（Neon）使用的後端。
+#
+# 第二個 job 很重要：建置這個專案的機器沒有網路，也無法安裝 psycopg 或啟動
+# Postgres，所以 Postgres 這條程式碼路徑只有在這裡才會真正被執行到。
+# 少了它，CONTRACT.md 宣稱「CI 會驗證 Postgres」就會是一句空話。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  sqlite:
+    name: 測試（SQLite）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 語法檢查
+        run: python -m compileall -q app tests manage.py serve.py
+
+      # 應用程式本身只用標準函式庫，所以這裡不需要安裝任何套件。
+      - name: 執行測試
+        run: python -m unittest discover -s tests -t . --verbose
+
+  postgres:
+    name: 測試（Postgres 16）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 安裝 Postgres 驅動程式
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # TEST_DATABASE_URL 會讓 tests/support.py 改用 Postgres，
+      # 每個測試各自建立一個 schema 以維持隔離。
+      - name: 對真正的 Postgres 執行測試
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
+        run: python -m unittest discover -s tests -t . --verbose

@@ -1,0 +1,115 @@
+# 部署（spec §10.1）
+#
+# 只能由人手動按下按鈕觸發（workflow_dispatch），符合 C3：擁有者不需要打開終端機，
+# 只要在 GitHub 網頁上按「Run workflow」即可。刻意不設定 push 觸發。
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# 同一時間只允許一個部署，避免兩次部署互相覆蓋。
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 部署到 Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      EMAIL_PROVIDER_API_KEY: ${{ secrets.EMAIL_PROVIDER_API_KEY }}
+      EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}
+      APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_INITIAL_PASSWORD: ${{ secrets.ADMIN_INITIAL_PASSWORD }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # 這一步會列出所有缺少的 Secret 名稱後失敗（spec §12 E2）。
+      - name: 檢查必要的 Secrets
+        run: python manage.py check-secrets
+
+      # 部署金鑰不在 spec §10.2 的清單裡，但沒有它就無法部署，所以一併檢查。
+      - name: 檢查 Render 部署金鑰
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "ERROR: 缺少 Secret：RENDER_DEPLOY_HOOK_URL" >&2
+            echo "請依照 SETUP.md 的說明，到 Render 複製 Deploy Hook 網址後貼上。" >&2
+            exit 1
+          fi
+          echo "OK: RENDER_DEPLOY_HOOK_URL 已設定"
+
+      - name: 安裝套件
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 語法檢查
+        run: python -m compileall -q app tests manage.py serve.py
+
+      # 測試一律使用暫存的 SQLite，不會碰到正式資料庫。
+      - name: 執行測試
+        run: python -m unittest discover -s tests -t .
+
+      # 建立資料表、寫入預設設定、建立管理員與範例會議室；重複執行是安全的。
+      - name: 資料庫遷移與初始化
+        run: python manage.py migrate
+
+      - name: 觸發 Render 部署
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "正在通知 Render 開始部署…"
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" --max-time 60
+          echo
+          echo "已送出部署要求。"
+
+      # Render 需要一點時間才會把新版本換上去；先等一下再開始檢查，
+      # 否則可能會檢查到還沒被替換掉的舊版本。
+      - name: 等待新版本上線
+        run: sleep 45
+
+      # 冷啟動可能要 60 秒，因此重試多次（spec §2.1）。
+      - name: 部署後健康檢查
+        run: |
+          python manage.py health \
+            --url "${APP_BASE_URL%/}/api/health" \
+            --retries 20 \
+            --retry-delay 15
+
+      - name: 寫入部署摘要
+        if: always()
+        run: |
+          {
+            echo "## 部署結果"
+            echo
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "✅ 部署成功。"
+              echo
+              echo "**網站網址：** ${APP_BASE_URL%/}"
+              echo
+              echo "- 健康檢查：${APP_BASE_URL%/}/api/health"
+              echo "- 第一次登入請使用 \`ADMIN_EMAIL\` 與 \`ADMIN_INITIAL_PASSWORD\`，"
+              echo "  系統會立刻要求你變更密碼。"
+              echo "- 若第一次開啟網站很慢，那是免費方案的正常喚醒時間（約 1 分鐘）。"
+            else
+              echo "❌ 部署失敗。請展開上面失敗的步驟查看原因。"
+              echo
+              echo "最常見的原因是少貼了某個 Secret，"
+              echo "「檢查必要的 Secrets」步驟會直接列出缺少哪一個。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

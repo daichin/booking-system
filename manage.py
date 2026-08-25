@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -77,6 +78,22 @@ def cmd_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _probe(url: str, timeout: float) -> tuple[int, str] | None:
+    """One health request. ``None`` means the host was unreachable.
+
+    An HTTP error response is still an answer -- it is returned so the caller
+    can report the status rather than retrying a service that is up but sick.
+    """
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     """Hit ``--url`` and exit non-zero unless it is 200 with database ok.
 
@@ -86,16 +103,23 @@ def cmd_health(args: argparse.Namespace) -> int:
     right after triggering a fresh deploy, when the service is definitely
     warm from the deploy itself).
     """
-    request = urllib.request.Request(args.url, headers={"Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=args.timeout) as response:
-            status = response.status
-            body = response.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        status = exc.code
-        body = exc.read().decode("utf-8", errors="replace")
-    except urllib.error.URLError as exc:
-        print(f"ERROR: could not reach {args.url}: {exc}", file=sys.stderr)
+    last_error = ""
+    for attempt in range(1, args.retries + 1):
+        outcome = _probe(args.url, args.timeout)
+        if outcome is not None:
+            status, body = outcome
+            break
+        last_error = f"could not reach {args.url}"
+        if attempt < args.retries:
+            print(
+                f"  attempt {attempt}/{args.retries} failed; retrying in"
+                f" {args.retry_delay:.0f}s (a free Render service can take"
+                f" ~60s to wake)",
+                file=sys.stderr,
+            )
+            time.sleep(args.retry_delay)
+    else:
+        print(f"ERROR: {last_error}", file=sys.stderr)
         return 1
 
     try:
@@ -142,6 +166,19 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=15.0,
         help="Request timeout in seconds (default: 15).",
+    )
+    health.add_argument(
+        "--retries",
+        type=int,
+        default=1,
+        help="Attempts before giving up (default: 1). Raise this when the "
+             "service may be cold-starting.",
+    )
+    health.add_argument(
+        "--retry-delay",
+        type=float,
+        default=15.0,
+        help="Seconds between attempts (default: 15).",
     )
     health.set_defaults(func=cmd_health)
 

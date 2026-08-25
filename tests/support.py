@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import uuid
 import unittest
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -25,22 +26,65 @@ from app.timeutil import combine_taipei, local_date, now_utc
 security.configure(n=1 << 10)
 
 
+#: Point this at a real Postgres to run the entire suite against the
+#: production backend. CI does exactly that (see .github/workflows/ci.yml);
+#: without it the suite uses SQLite and needs no setup at all.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+
+def _bootstrap(conn: Connection) -> None:
+    migrate(conn)
+    seed_defaults(conn)
+
+
+def _with_search_path(dsn: str, schema: str) -> str:
+    """Pin every connection made from ``dsn`` to one schema.
+
+    The Postgres backend opens a fresh connection per transaction, so a
+    ``SET search_path`` would not survive. Putting it in the DSN makes it
+    apply to all of them.
+    """
+    separator = "&" if "?" in dsn else "?"
+    return f"{dsn}{separator}options=-csearch_path%3D{schema}"
+
+
+def _make_postgres_db() -> Database:
+    """A private schema on the shared Postgres, migrated and seeded.
+
+    One schema per test keeps tests isolated from each other without the cost
+    of creating a database each time.
+    """
+    schema = f"test_{uuid.uuid4().hex[:16]}"
+    admin = create_database(TEST_DATABASE_URL)
+    admin.run_in_transaction(lambda conn: conn.execute(f'CREATE SCHEMA "{schema}"'))
+
+    db = create_database(_with_search_path(TEST_DATABASE_URL, schema))
+    db.run_in_transaction(_bootstrap)
+    db.test_schema = schema  # read by the teardown below
+    return db
+
+
+def drop_postgres_schema(schema: str) -> None:
+    admin = create_database(TEST_DATABASE_URL)
+    admin.run_in_transaction(
+        lambda conn: conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+    )
+
+
 def make_db(path: str | None = None) -> Database:
     """A migrated, seeded, empty database.
 
-    Backed by a temporary file rather than ``:memory:``. SQLite's shared-cache
-    in-memory mode reports contention as ``SQLITE_LOCKED``, which
+    Defaults to a temporary SQLite file rather than ``:memory:``. SQLite's
+    shared-cache in-memory mode reports contention as ``SQLITE_LOCKED``, which
     ``busy_timeout`` does not cover, so concurrent writers would fail instead
     of queueing -- exactly the behaviour the preemption concurrency tests need
     to exercise for real.
     """
+    if TEST_DATABASE_URL:
+        return _make_postgres_db()
+
     db = create_database(f"sqlite://{path}" if path else None)
-
-    def bootstrap(conn: Connection) -> None:
-        migrate(conn)
-        seed_defaults(conn)
-
-    db.run_in_transaction(bootstrap)
+    db.run_in_transaction(_bootstrap)
     return db
 
 
@@ -63,7 +107,10 @@ class AppTestCase(unittest.TestCase):
         self.addCleanup(self._drop_database)
 
     def _drop_database(self) -> None:
+        schema = getattr(self.db, "test_schema", None)
         self.db.close()
+        if schema:
+            drop_postgres_schema(schema)
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     # --- clock ------------------------------------------------------------
