@@ -1,0 +1,707 @@
+<title>會議室系統安裝手冊</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+
+<style>
+:root{
+  --ground:#F2F5F6;
+  --surface:#FFFFFF;
+  --surface-2:#E8EEF0;
+  --ink:#12202A;
+  --ink-soft:#4C616F;
+  --ink-faint:#7C919D;
+  --line:#D3DEE2;
+  --line-strong:#B4C5CB;
+  --accent:#0F6079;
+  --accent-ink:#0B4557;
+  --accent-soft:#DFEDF1;
+  --signal:#A65A00;
+  --signal-soft:#FAEEDC;
+  --good:#1C6E47;
+  --good-soft:#DFF0E7;
+  --danger:#A32D22;
+  --danger-soft:#FBE8E5;
+  --shadow:0 1px 2px rgba(18,32,42,.06),0 8px 24px -16px rgba(18,32,42,.25);
+
+  --display:"Noto Serif TC",Georgia,"Songti TC",serif;
+  --body:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C161C;
+    --surface:#132430;
+    --surface-2:#1B303E;
+    --ink:#E7EFF2;
+    --ink-soft:#A3B7C1;
+    --ink-faint:#7B929E;
+    --line:#26404F;
+    --line-strong:#365463;
+    --accent:#5FC2DC;
+    --accent-ink:#9BDCEE;
+    --accent-soft:#122F3A;
+    --signal:#E7A44A;
+    --signal-soft:#332711;
+    --good:#5FC48E;
+    --good-soft:#12301F;
+    --danger:#F08C7F;
+    --danger-soft:#381915;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C161C;
+  --surface:#132430;
+  --surface-2:#1B303E;
+  --ink:#E7EFF2;
+  --ink-soft:#A3B7C1;
+  --ink-faint:#7B929E;
+  --line:#26404F;
+  --line-strong:#365463;
+  --accent:#5FC2DC;
+  --accent-ink:#9BDCEE;
+  --accent-soft:#122F3A;
+  --signal:#E7A44A;
+  --signal-soft:#332711;
+  --good:#5FC48E;
+  --good-soft:#12301F;
+  --danger:#F08C7F;
+  --danger-soft:#381915;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:16.5px;
+  line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-ink);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:3px}
+code,kbd{font-family:var(--mono);font-size:.88em}
+code{background:var(--surface-2);padding:.1em .38em;border-radius:4px;word-break:break-all}
+kbd{
+  background:var(--surface);border:1px solid var(--line-strong);
+  border-bottom-width:2px;border-radius:5px;padding:.1em .45em;font-size:.82em;
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+}
+.masthead-inner{
+  max-width:1180px;margin:0 auto;padding:3.2rem 1.5rem 2.4rem;
+}
+.eyebrow{
+  font-family:var(--mono);font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 .9rem;
+}
+h1{
+  font-family:var(--display);font-weight:700;
+  font-size:clamp(2rem,5.5vw,3.1rem);line-height:1.25;margin:0 0 .8rem;
+  text-wrap:balance;letter-spacing:.01em;
+}
+.standfirst{
+  font-size:1.08rem;color:var(--ink-soft);margin:0;max-width:46ch;
+}
+.facts{
+  display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.8rem;padding:0;list-style:none;
+}
+.facts li{
+  display:flex;align-items:baseline;gap:.5rem;
+  background:var(--accent-soft);border:1px solid var(--line);
+  border-radius:999px;padding:.4rem 1rem;font-size:.9rem;
+}
+.facts b{font-family:var(--mono);font-weight:500;color:var(--accent-ink)}
+
+/* ---------- shell ---------- */
+.shell{
+  max-width:1180px;margin:0 auto;padding:0 1.5rem 5rem;
+  display:grid;grid-template-columns:1fr;gap:2.5rem;
+}
+@media (min-width:1000px){
+  .shell{grid-template-columns:236px minmax(0,1fr);gap:3.5rem;align-items:start}
+}
+
+/* ---------- index ---------- */
+.index{
+  position:sticky;top:1rem;align-self:start;
+  margin-top:2.5rem;
+}
+.index h2{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);margin:0 0 .9rem;font-weight:500;
+}
+.index ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.15rem}
+.index a{
+  display:flex;gap:.7rem;align-items:baseline;
+  text-decoration:none;color:var(--ink-soft);font-size:.93rem;
+  padding:.42rem .6rem;border-radius:7px;border-left:2px solid transparent;
+}
+.index a:hover{background:var(--surface);color:var(--ink)}
+.index a.is-current{
+  background:var(--surface);color:var(--accent-ink);font-weight:500;
+  border-left-color:var(--accent);
+}
+.index .n{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint);min-width:1.4em}
+.index a.is-current .n{color:var(--accent)}
+.toc-toggle{display:none}
+@media (max-width:999px){
+  .index{position:static;margin-top:1.75rem}
+  .toc-toggle{
+    display:block;width:100%;text-align:start;cursor:pointer;
+    font-family:var(--body);font-size:.95rem;font-weight:500;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:.8rem 1rem;
+  }
+  .index ol{
+    max-height:0;overflow:hidden;transition:max-height .28s ease;
+    background:var(--surface);border-radius:10px;
+  }
+  .index.open ol{max-height:34rem;margin-top:.5rem;padding:.5rem}
+}
+
+/* ---------- content ---------- */
+main{min-width:0;padding-top:2.5rem}
+section{scroll-margin-top:1.5rem;margin-bottom:3.5rem}
+h2.step{
+  font-family:var(--display);font-weight:700;font-size:1.62rem;line-height:1.35;
+  margin:0 0 1rem;display:flex;gap:.85rem;align-items:baseline;text-wrap:balance;
+}
+h2.step .num{
+  font-family:var(--mono);font-size:.82rem;font-weight:500;
+  color:var(--surface);background:var(--accent);
+  border-radius:6px;padding:.22em .6em;flex:none;transform:translateY(-.2em);
+}
+h3{font-family:var(--display);font-size:1.16rem;font-weight:600;margin:2rem 0 .6rem}
+p{margin:0 0 1.05rem;max-width:66ch}
+.lede{color:var(--ink-soft);max-width:64ch}
+
+ol.steps{counter-reset:s;list-style:none;margin:1.2rem 0;padding:0;display:flex;flex-direction:column;gap:.9rem}
+ol.steps>li{
+  counter-increment:s;position:relative;padding-inline-start:2.4rem;max-width:64ch;
+}
+ol.steps>li::before{
+  content:counter(s);position:absolute;inset-inline-start:0;top:.28em;
+  font-family:var(--mono);font-size:.75rem;color:var(--accent-ink);
+  background:var(--accent-soft);border:1px solid var(--line);
+  width:1.65rem;height:1.65rem;border-radius:50%;
+  display:grid;place-items:center;
+}
+ul.plain{margin:0 0 1.05rem;padding-inline-start:1.2rem;max-width:64ch}
+ul.plain li{margin-bottom:.35rem}
+
+/* ---------- callouts ---------- */
+.note{
+  border:1px solid var(--line);border-inline-start:4px solid var(--accent);
+  background:var(--surface);border-radius:0 10px 10px 0;
+  padding:1.05rem 1.2rem;margin:1.5rem 0;box-shadow:var(--shadow);
+}
+.note.warn{border-inline-start-color:var(--signal);background:var(--signal-soft)}
+.note.good{border-inline-start-color:var(--good);background:var(--good-soft)}
+.note-title{
+  font-weight:700;margin:0 0 .4rem;font-size:.95rem;
+  display:flex;align-items:center;gap:.5rem;
+}
+.note p:last-child{margin-bottom:0}
+.note p{max-width:none}
+
+/* ---------- figures ---------- */
+figure{
+  margin:2rem 0;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:1.4rem 1.2rem 1rem;box-shadow:var(--shadow);
+  overflow-x:auto;
+}
+figure svg{display:block;max-width:100%;height:auto;margin:0 auto;color:var(--ink-soft)}
+figcaption{
+  margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line);
+  font-size:.88rem;color:var(--ink-soft);line-height:1.7;
+}
+figcaption b{color:var(--ink)}
+
+/* ---------- table ---------- */
+.table-wrap{overflow-x:auto;margin:1.5rem 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:540px}
+th,td{text-align:start;padding:.72rem .9rem;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{
+  background:var(--surface-2);font-size:.76rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-soft);font-weight:700;white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td code{background:var(--accent-soft);color:var(--accent-ink);font-weight:500}
+.src{white-space:nowrap;color:var(--ink-soft);font-size:.86rem}
+
+/* ---------- faq ---------- */
+details{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:.9rem 1.1rem;margin-bottom:.7rem;
+}
+details[open]{box-shadow:var(--shadow)}
+summary{cursor:pointer;font-weight:500;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"＋";color:var(--accent);font-family:var(--mono);margin-inline-end:.6rem}
+details[open] summary::before{content:"－"}
+details p{margin:.8rem 0 .2rem;color:var(--ink-soft)}
+
+footer{
+  border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;
+  color:var(--ink-faint);font-size:.86rem;
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">安裝手冊 ・ v1.0</p>
+    <h1>會議室系統安裝手冊</h1>
+    <p class="standfirst">從零開始把系統架設起來。全部在網頁上完成，不需要安裝任何軟體，用手機也可以。</p>
+    <ul class="facts">
+      <li>所需時間 <b>約 40 分鐘</b></li>
+      <li>費用 <b>NT$0</b></li>
+      <li>信用卡 <b>不需要</b></li>
+      <li>需具備 <b>GitHub 帳號</b></li>
+    </ul>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="index" id="index" aria-label="目錄">
+    <h2>目錄</h2>
+    <button class="toc-toggle" id="tocToggle" aria-expanded="false" aria-controls="tocList">☰ 目錄</button>
+    <ol id="tocList">
+      <li><a href="#overview"><span class="n">－</span><span>開始之前</span></a></li>
+      <li><a href="#map"><span class="n">－</span><span>整體流程圖</span></a></li>
+      <li><a href="#neon"><span class="n">1</span><span>建立資料庫</span></a></li>
+      <li><a href="#brevo"><span class="n">2</span><span>設定寄信服務</span></a></li>
+      <li><a href="#render"><span class="n">3</span><span>建立網站主機</span></a></li>
+      <li><a href="#secrets"><span class="n">4</span><span>貼上九項設定</span></a></li>
+      <li><a href="#deploy"><span class="n">5</span><span>按下部署按鈕</span></a></li>
+      <li><a href="#first-login"><span class="n">6</span><span>第一次登入</span></a></li>
+      <li><a href="#reminders"><span class="n">7</span><span>開啟自動提醒信</span></a></li>
+      <li><a href="#faq"><span class="n">？</span><span>常見問題</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <h2 class="step">開始之前</h2>
+      <p class="lede">這套系統由三個免費服務組合而成，各自負責一件事。你要做的，就是分別去申請，把它們給你的「一長串英文數字」貼到 GitHub，最後按一個按鈕。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>服務</th><th>負責什麼</th><th>免費額度</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Neon</b></td><td>存放所有預約與成員資料</td><td>永久免費，<b>資料不會過期</b></td></tr>
+            <tr><td><b>Brevo</b></td><td>寄出驗證信、通知信、提醒信</td><td>每天 300 封</td></tr>
+            <tr><td><b>Render</b></td><td>實際執行網站，並提供免費網址</td><td>永久免費，閒置會休眠</td></tr>
+            <tr><td><b>GitHub</b></td><td>存放程式、按鈕部署、定時寄提醒信</td><td>公開儲存庫免費</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <p class="note-title">先準備一個記事本</p>
+        <p>接下來會請你複製好幾組很長的英文數字。建議先開一個記事本暫時貼著，最後一次貼到 GitHub。<b>全部設定完成後，請把記事本刪掉。</b></p>
+      </div>
+    </section>
+
+    <section id="map">
+      <h2 class="step">整體流程圖</h2>
+      <p class="lede">先看懂這張圖，後面每一步都只是在填其中一格。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 430" role="img" aria-label="三個服務各自產生憑證，貼進 GitHub Secrets，按下部署後網站上線；同樣八項也要貼到 Render">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="ah-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#0F6079"/>
+            </marker>
+          </defs>
+
+          <!-- providers -->
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="14" y="30" width="176" height="68" rx="9"/>
+            <rect x="14" y="152" width="176" height="68" rx="9"/>
+            <rect x="14" y="274" width="176" height="68" rx="9"/>
+          </g>
+          <g font-family="Noto Sans TC, sans-serif" fill="currentColor">
+            <text x="102" y="58" text-anchor="middle" font-size="15" font-weight="700">Neon</text>
+            <text x="102" y="80" text-anchor="middle" font-size="11.5">資料庫</text>
+            <text x="102" y="180" text-anchor="middle" font-size="15" font-weight="700">Brevo</text>
+            <text x="102" y="202" text-anchor="middle" font-size="11.5">寄信服務</text>
+            <text x="102" y="302" text-anchor="middle" font-size="15" font-weight="700">Render</text>
+            <text x="102" y="324" text-anchor="middle" font-size="11.5">網站主機</text>
+          </g>
+
+          <!-- arrows into secrets -->
+          <g stroke="currentColor" stroke-width="1.4" fill="none" marker-end="url(#ah)">
+            <path d="M190,64 H262 Q276,64 276,92 V150"/>
+            <path d="M190,186 H276"/>
+            <path d="M190,308 H262 Q276,308 276,280 V222"/>
+          </g>
+          <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity=".85">
+            <text x="196" y="56">連線字串</text>
+            <text x="196" y="178">API 金鑰・寄件地址</text>
+            <text x="196" y="300">網址・部署金鑰</text>
+          </g>
+
+          <!-- secrets box -->
+          <rect x="286" y="120" width="212" height="132" rx="10" fill="none" stroke="#0F6079" stroke-width="2"/>
+          <text x="392" y="152" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="15" font-weight="700" fill="#0F6079">GitHub Secrets</text>
+          <text x="392" y="176" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">九項設定值</text>
+          <text x="392" y="200" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">Settings → Secrets</text>
+          <text x="392" y="224" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">→ Actions</text>
+
+          <!-- dashed back to render -->
+          <path d="M340,252 V372 H102 V342" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+          <text x="220" y="392" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">其中八項也要貼到 Render 的環境變數</text>
+
+          <!-- to deploy -->
+          <path d="M498,168 H576" fill="none" stroke="#0F6079" stroke-width="2" marker-end="url(#ah-a)"/>
+          <rect x="588" y="128" width="180" height="80" rx="9" fill="none" stroke="#0F6079" stroke-width="2"/>
+          <text x="678" y="160" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#0F6079">按下 Deploy</text>
+          <text x="678" y="182" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">Actions 分頁</text>
+
+          <path d="M678,208 V266" fill="none" stroke="#0F6079" stroke-width="2" marker-end="url(#ah-a)"/>
+          <rect x="588" y="278" width="180" height="76" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="678" y="308" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="currentColor">網站上線</text>
+          <text x="678" y="330" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">*.onrender.com</text>
+        </svg>
+        <figcaption><b>每個服務各給你一段憑證，全部集中貼進 GitHub Secrets。</b>虛線是最容易漏掉的一步：其中八項除了 GitHub 之外，還要再貼一份到 Render 的環境變數，因為實際跑網站的是 Render。</figcaption>
+      </figure>
+    </section>
+
+    <section id="neon">
+      <h2 class="step"><span class="num">1</span>建立資料庫（Neon）</h2>
+      <p class="lede">資料庫是存放所有預約紀錄的地方。Neon 的免費方案<b>資料不會過期</b>，這也是我們沒有選其他家的原因。</p>
+      <ol class="steps">
+        <li>打開 <a href="https://neon.com">neon.com</a>，按右上角的 <kbd>Sign up</kbd>。</li>
+        <li>選擇 <kbd>Continue with GitHub</kbd>，用你的 GitHub 帳號登入。</li>
+        <li>建立專案：名稱輸入 <code>booking</code>，其他保持預設，按 <kbd>Create project</kbd>。</li>
+        <li>畫面上會出現一段以 <code>postgresql://</code> 開頭的長字串，標示為 <b>Connection string</b>。</li>
+        <li>按複製，貼到記事本，註明這是 <code>DATABASE_URL</code>。</li>
+      </ol>
+      <div class="note">
+        <p class="note-title">它長這樣</p>
+        <p><code>postgresql://neondb_owner:········@ep-xxxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require</code></p>
+      </div>
+    </section>
+
+    <section id="brevo">
+      <h2 class="step"><span class="num">2</span>設定寄信服務（Brevo）</h2>
+      <p class="lede">系統需要寄出驗證信、預約確認信與會議提醒信。免費方案每天 300 封，對 200 人的組織綽綽有餘。</p>
+
+      <h3>先確認寄件人地址</h3>
+      <ol class="steps">
+        <li>到 <a href="https://www.brevo.com">brevo.com</a> 按 <kbd>Sign up free</kbd> 註冊，並到信箱點擊驗證連結。</li>
+        <li>左側選單找到 <b>Senders, Domains &amp; Dedicated IPs</b>。</li>
+        <li>按 <kbd>Add a sender</kbd>，填入寄件名稱與電子郵件地址（例如公司行政信箱）。</li>
+        <li>Brevo 會寄確認信到那個地址，點擊裡面的連結完成確認。</li>
+        <li>把這個地址記到記事本，註明 <code>EMAIL_FROM_ADDRESS</code>。</li>
+      </ol>
+
+      <h3>再取得 API 金鑰</h3>
+      <ol class="steps">
+        <li>點右上角頭像 → <b>SMTP &amp; API</b>，切換到 <b>API Keys</b> 分頁。</li>
+        <li>按 <kbd>Generate a new API key</kbd>，名稱輸入 <code>booking</code>。</li>
+        <li>畫面顯示一串以 <code>xkeysib-</code> 開頭的文字。</li>
+        <li>立刻複製貼到記事本，註明 <code>EMAIL_PROVIDER_API_KEY</code>。</li>
+      </ol>
+
+      <div class="note warn">
+        <p class="note-title">⚠ 這串金鑰只會出現一次</p>
+        <p>關掉視窗就再也看不到了。如果不小心關掉，重新產生一組新的即可，舊的可以直接刪除。</p>
+      </div>
+    </section>
+
+    <section id="render">
+      <h2 class="step"><span class="num">3</span>建立網站主機（Render）</h2>
+      <p class="lede">Render 負責實際執行系統，並提供一個 <code>.onrender.com</code> 的免費網址。</p>
+      <ol class="steps">
+        <li>到 <a href="https://render.com">render.com</a> 按 <kbd>Get Started</kbd>，用 GitHub 帳號登入。</li>
+        <li>按 <kbd>New +</kbd> → <kbd>Web Service</kbd>，選擇這個系統所在的儲存庫。</li>
+        <li>填寫設定：
+          <ul class="plain">
+            <li><b>Name</b>：例如 <code>meeting-room-booking</code>（會變成你的網址）</li>
+            <li><b>Language</b>：<code>Python 3</code></li>
+            <li><b>Build Command</b>：<code>pip install -r requirements.txt</code></li>
+            <li><b>Start Command</b>：<code>gunicorn "app.web.app:build_wsgi_app()" --bind 0.0.0.0:$PORT</code></li>
+            <li><b>Instance Type</b>：<code>Free</code></li>
+          </ul>
+        </li>
+        <li>把 <b>Auto-Deploy</b> 設為 <kbd>No</kbd>。我們要用 GitHub 的按鈕部署，而不是每次改動就自動部署。</li>
+        <li>按 <kbd>Create Web Service</kbd>。<b>第一次會啟動失敗，這是正常的</b>，因為環境變數還沒設定。</li>
+        <li>複製頁面最上方的網址（例如 <code>https://meeting-room-booking.onrender.com</code>），註明 <code>APP_BASE_URL</code>。</li>
+        <li>左側 <b>Settings</b> → 往下找到 <b>Deploy Hook</b>，複製那串網址，註明 <code>RENDER_DEPLOY_HOOK_URL</code>。</li>
+      </ol>
+      <div class="note">
+        <p class="note-title">環境變數稍後再回來填</p>
+        <p>下一步整理好九項設定後，請回到 Render 左側的 <b>Environment</b>，把其中的<b>前八項</b>加進去（不含 Deploy Hook，那個只有 GitHub 需要）。</p>
+      </div>
+    </section>
+
+    <section id="secrets">
+      <h2 class="step"><span class="num">4</span>貼上九項設定</h2>
+      <p class="lede">現在把記事本裡的東西貼進 GitHub。名稱必須<b>一字不差</b>，包含大小寫與底線。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>名稱</th><th>內容</th><th class="src">來源</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>DATABASE_URL</code></td><td>資料庫連線字串</td><td class="src">步驟 1</td></tr>
+            <tr><td><code>EMAIL_PROVIDER_API_KEY</code></td><td>寄信服務 API 金鑰</td><td class="src">步驟 2</td></tr>
+            <tr><td><code>EMAIL_FROM_ADDRESS</code></td><td>系統寄信的寄件人信箱</td><td class="src">步驟 2</td></tr>
+            <tr><td><code>APP_BASE_URL</code></td><td>你的網站網址</td><td class="src">步驟 3</td></tr>
+            <tr><td><code>SESSION_SECRET</code></td><td>保護登入狀態的隨機字串</td><td class="src">自己產生</td></tr>
+            <tr><td><code>ADMIN_EMAIL</code></td><td>你（管理員）的電子郵件</td><td class="src">自己決定</td></tr>
+            <tr><td><code>ADMIN_INITIAL_PASSWORD</code></td><td>管理員第一次登入的密碼</td><td class="src">自己決定</td></tr>
+            <tr><td><code>CRON_SECRET</code></td><td>保護提醒信排程的隨機字串</td><td class="src">自己產生</td></tr>
+            <tr><td><code>RENDER_DEPLOY_HOOK_URL</code></td><td>Render 部署金鑰網址</td><td class="src">步驟 3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>兩個「隨機字串」怎麼生？</h3>
+      <p>只要夠長又難猜就好，你不需要記住它們。隨手在鍵盤上打 40 個以上的英數字即可，例如 <code>k8Fq2mZp7Lw4Rt9YvXb3Nc6Hd1Js5Gk0Aq2Wf8E</code>。<b>兩個請使用不一樣的內容。</b></p>
+
+      <h3>貼上的位置</h3>
+      <ol class="steps">
+        <li>在 GitHub 打開儲存庫，點上方 <kbd>Settings</kbd>。</li>
+        <li>左側 <b>Secrets and variables</b> → <b>Actions</b>。</li>
+        <li>按 <kbd>New repository secret</kbd>，填入名稱與內容，按 <kbd>Add secret</kbd>。</li>
+        <li>重複直到九項全部加完。</li>
+        <li><b>回到 Render 的 Environment</b>，把前八項再貼一次，按 <kbd>Save Changes</kbd>。</li>
+      </ol>
+
+      <div class="note good">
+        <p class="note-title">✓ 打錯了也不要緊</p>
+        <p>部署時系統會逐一檢查，缺少或名稱打錯的項目會被<b>直接列出名稱</b>，回來補上再按一次即可。不會有「不知道哪裡錯了」的情況。</p>
+      </div>
+    </section>
+
+    <section id="deploy">
+      <h2 class="step"><span class="num">5</span>按下部署按鈕</h2>
+      <p class="lede">這是唯一一個「執行」的動作：Actions 分頁 → Deploy → Run workflow。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 300" role="img" aria-label="部署流程：檢查設定、安裝、測試、資料庫遷移、部署、健康檢查，任一步失敗即停止">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="ah2-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#A65A00"/>
+            </marker>
+          </defs>
+
+          <g font-family="Noto Sans TC, sans-serif" font-size="12.5" fill="currentColor">
+            <g fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="12" y="70" width="122" height="58" rx="8"/>
+              <rect x="166" y="70" width="112" height="58" rx="8"/>
+              <rect x="310" y="70" width="112" height="58" rx="8"/>
+              <rect x="454" y="70" width="122" height="58" rx="8"/>
+              <rect x="608" y="70" width="112" height="58" rx="8"/>
+            </g>
+            <text x="73" y="95" text-anchor="middle">檢查九項</text>
+            <text x="73" y="114" text-anchor="middle">設定</text>
+            <text x="222" y="105" text-anchor="middle">安裝與測試</text>
+            <text x="366" y="105" text-anchor="middle">資料庫遷移</text>
+            <text x="515" y="95" text-anchor="middle">部署到</text>
+            <text x="515" y="114" text-anchor="middle">Render</text>
+            <text x="664" y="105" text-anchor="middle">健康檢查</text>
+          </g>
+
+          <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#ah2)">
+            <path d="M134,99 H160"/>
+            <path d="M278,99 H304"/>
+            <path d="M422,99 H448"/>
+            <path d="M576,99 H602"/>
+          </g>
+
+          <path d="M720,99 H790" fill="none" stroke="#1C6E47" stroke-width="2"/>
+          <rect x="746" y="70" width="120" height="58" rx="8" fill="none" stroke="#1C6E47" stroke-width="2"/>
+          <text x="806" y="95" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13" font-weight="700" fill="#1C6E47">網站上線</text>
+          <text x="806" y="114" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">附上網址</text>
+
+          <!-- failure branch -->
+          <g stroke="#A65A00" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#ah2-d)">
+            <path d="M73,128 V196"/>
+            <path d="M222,128 V196"/>
+            <path d="M366,128 V196"/>
+          </g>
+          <rect x="12" y="204" width="410" height="62" rx="8" fill="none" stroke="#A65A00" stroke-width="1.5"/>
+          <text x="217" y="230" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13" font-weight="700" fill="#A65A00">立刻停止，不會動到正式資料</text>
+          <text x="217" y="252" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">畫面直接列出缺少的設定名稱或失敗原因</text>
+        </svg>
+        <figcaption><b>六個步驟依序執行，任何一步失敗就整個停下來。</b>檢查設定排在最前面，是為了在還沒碰到資料庫之前就先攔下最常見的錯誤——少貼一項 Secret。</figcaption>
+      </figure>
+
+      <ol class="steps">
+        <li>在儲存庫點上方 <kbd>Actions</kbd>。</li>
+        <li>左側清單點 <b>Deploy</b>。</li>
+        <li>右側按 <kbd>Run workflow</kbd>，再按一次綠色的 <kbd>Run workflow</kbd> 確認。</li>
+        <li>等待 3 到 8 分鐘。</li>
+        <li>看到綠色勾勾後往下捲，「部署結果」裡就有你的網站網址。</li>
+      </ol>
+    </section>
+
+    <section id="first-login">
+      <h2 class="step"><span class="num">6</span>第一次登入</h2>
+      <ol class="steps">
+        <li>打開你的網站網址。<b>第一次可能要等將近 1 分鐘</b>，這是免費方案的喚醒時間。</li>
+        <li>用 <code>ADMIN_EMAIL</code> 與 <code>ADMIN_INITIAL_PASSWORD</code> 登入。</li>
+        <li>系統會<b>立刻要求你設定新密碼</b>，請設定一組只有你知道的。</li>
+      </ol>
+
+      <div class="note warn">
+        <p class="note-title">⚠ 為什麼一定要改密碼</p>
+        <p>初始密碼是明文存在 GitHub 的設定裡，任何能看到儲存庫設定的人都可能知道它。因此系統<b>強制</b>你在第一次登入時更換，不改就不能使用任何功能。</p>
+      </div>
+
+      <h3>接著建議做這三件事</h3>
+      <ul class="plain">
+        <li><b>會議室</b>：系統預先建立了三間範例，請改成你們實際的會議室。</li>
+        <li><b>系統設定</b>：確認預約規則（每次最長時數、可預約多久以後、每人可保留幾筆）符合需求。</li>
+        <li><b>邀請成員</b>：用邀請功能寄出連結，收到的人填完資料就能直接使用，不需要再審核。</li>
+      </ul>
+    </section>
+
+    <section id="reminders">
+      <h2 class="step"><span class="num">7</span>開啟自動提醒信</h2>
+      <p class="lede">系統會在會議開始前寄提醒信。這件事由 GitHub 定時觸發，因為免費方案沒有排程器。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 260" role="img" aria-label="GitHub 每 15 分鐘呼叫網站的提醒端點，喚醒休眠中的主機並寄出提醒信">
+          <defs>
+            <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect x="14" y="52" width="180" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="104" y="82" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="currentColor">GitHub Actions</text>
+          <text x="104" y="104" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">每 15 分鐘一次</text>
+
+          <path d="M194,89 H310" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <text x="252" y="80" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="currentColor">X-Cron-Secret</text>
+
+          <rect x="322" y="42" width="200" height="94" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="422" y="72" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="currentColor">Render 主機</text>
+          <text x="422" y="94" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">若休眠中，先喚醒</text>
+          <text x="422" y="115" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">（約 60 秒）</text>
+
+          <path d="M522,89 H638" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <text x="580" y="80" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">找出即將開始的會議</text>
+
+          <rect x="650" y="52" width="216" height="74" rx="9" fill="none" stroke="#0F6079" stroke-width="2"/>
+          <text x="758" y="82" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#0F6079">寄出提醒信</text>
+          <text x="758" y="104" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">同一筆只會寄一次</text>
+
+          <rect x="14" y="170" width="852" height="70" rx="9" fill="none" stroke="#A65A00" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="440" y="197" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13" font-weight="700" fill="#A65A00">儲存庫連續 60 天沒有任何動作時，GitHub 會自動停用這個排程</text>
+          <text x="440" y="220" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">管理後台首頁會顯示「提醒信最後執行時間」，那個時間停住就代表要回來重新啟用</text>
+        </svg>
+        <figcaption><b>提醒信不是由網站自己計時，而是由 GitHub 從外部定時敲門。</b>這也是為什麼主機休眠不影響提醒——敲門的動作本身就會把它叫醒。虛線框是這個做法唯一的代價，值得記在心裡。</figcaption>
+      </figure>
+
+      <ol class="steps">
+        <li>在儲存庫點 <kbd>Actions</kbd>。</li>
+        <li>若出現啟用提示，按 <kbd>I understand my workflows, go ahead and enable them</kbd>。</li>
+        <li>左側點 <b>Reminders</b>，確認它沒有被停用。</li>
+      </ol>
+
+      <div class="note warn">
+        <p class="note-title">⚠ 定期看一眼管理後台首頁</p>
+        <p>上面會寫「提醒信工作最後執行時間」。如果那個時間停在很久以前，回到 <b>Actions → Reminders</b>，看到 <kbd>Enable workflow</kbd> 就按下去，再按一次 <kbd>Run workflow</kbd> 立即補跑一次。</p>
+      </div>
+    </section>
+
+    <section id="faq">
+      <h2 class="step">常見問題</h2>
+
+      <details>
+        <summary>網站打開很慢，一直轉圈圈</summary>
+        <p>免費方案在 15 分鐘沒人使用後會休眠，下一個人開啟時需要約 1 分鐘喚醒。喚醒後就恢復正常速度。這是正常現象，不是故障。</p>
+      </details>
+
+      <details>
+        <summary>部署失敗，出現紅色叉叉</summary>
+        <p>點開紅色的步驟看訊息。如果寫著缺少某個設定，回到步驟 4 補上，注意名稱大小寫要完全一樣，然後重新執行一次。</p>
+      </details>
+
+      <details>
+        <summary>收不到系統寄出的信</summary>
+        <p>先看垃圾郵件匣。接著到管理後台的<b>寄信紀錄</b>頁面，看那封信的狀態是「已寄出」還是「失敗」，失敗會顯示原因。也請確認步驟 2 的寄件人地址已完成 Brevo 確認。</p>
+      </details>
+
+      <details>
+        <summary>今天的信寄不出去了</summary>
+        <p>免費方案每天上限 300 封，系統設定的安全上限是 280 封。超過之後會<b>優先停掉會議提醒信</b>，但驗證信、邀請信、密碼重設信、預約被取消的通知信仍照常寄出。隔天自動恢復。</p>
+      </details>
+
+      <details>
+        <summary>我想改預約規則</summary>
+        <p>管理後台 → <b>系統設定</b>，每一項旁邊都有中文說明。改完立即生效，不需要重新部署。</p>
+      </details>
+
+      <details>
+        <summary>資料會不會不見</summary>
+        <p>不會。Neon 免費方案不會刪除資料。系統也<b>永遠不會真正刪除預約紀錄</b>：取消或被覆蓋的預約會保留成歷史，方便日後查詢。</p>
+      </details>
+
+      <details>
+        <summary>要怎麼退回上一個版本</summary>
+        <p>在 GitHub 找到出問題之前的版本，用 <b>Revert</b> 產生一個還原版本，再到 <b>Actions → Deploy → Run workflow</b> 重新部署一次。詳細步驟見儲存庫裡的 <code>ROLLBACK.md</code>。</p>
+      </details>
+    </section>
+
+    <footer>
+      <p>會議室預約系統 v1.0 ・ 時區 Asia/Taipei ・ 介面語言 繁體中文</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  var toggle=document.getElementById('tocToggle');
+  var index=document.getElementById('index');
+  if(toggle){
+    toggle.addEventListener('click',function(){
+      var open=index.classList.toggle('open');
+      toggle.setAttribute('aria-expanded',open?'true':'false');
+    });
+  }
+  var links=Array.prototype.slice.call(document.querySelectorAll('.index a'));
+  var map={};
+  links.forEach(function(a){
+    var id=a.getAttribute('href').slice(1);
+    var el=document.getElementById(id);
+    if(el){map[id]=a;}
+  });
+  if(!('IntersectionObserver' in window))return;
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('is-current');});
+        var a=map[e.target.id];
+        if(a)a.classList.add('is-current');
+      }
+    });
+  },{rootMargin:'-10% 0px -75% 0px',threshold:0});
+  Object.keys(map).forEach(function(id){obs.observe(document.getElementById(id));});
+})();
+</script>

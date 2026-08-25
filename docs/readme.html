@@ -1,0 +1,561 @@
+<title>會議室預約系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+
+<style>
+:root{
+  --ground:#F2F5F6;
+  --surface:#FFFFFF;
+  --surface-2:#E8EEF0;
+  --ink:#12202A;
+  --ink-soft:#4C616F;
+  --ink-faint:#7C919D;
+  --line:#D3DEE2;
+  --line-strong:#B4C5CB;
+  --accent:#0F6079;
+  --accent-ink:#0B4557;
+  --accent-soft:#DFEDF1;
+  --signal:#A65A00;
+  --signal-soft:#FAEEDC;
+  --good:#1C6E47;
+  --good-soft:#DFF0E7;
+  --danger:#A32D22;
+  --danger-soft:#FBE8E5;
+  --shadow:0 1px 2px rgba(18,32,42,.06),0 8px 24px -16px rgba(18,32,42,.25);
+
+  --display:"Noto Serif TC",Georgia,"Songti TC",serif;
+  --body:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C161C; --surface:#132430; --surface-2:#1B303E;
+    --ink:#E7EFF2; --ink-soft:#A3B7C1; --ink-faint:#7B929E;
+    --line:#26404F; --line-strong:#365463;
+    --accent:#5FC2DC; --accent-ink:#9BDCEE; --accent-soft:#122F3A;
+    --signal:#E7A44A; --signal-soft:#332711;
+    --good:#5FC48E; --good-soft:#12301F;
+    --danger:#F08C7F; --danger-soft:#381915;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C161C; --surface:#132430; --surface-2:#1B303E;
+  --ink:#E7EFF2; --ink-soft:#A3B7C1; --ink-faint:#7B929E;
+  --line:#26404F; --line-strong:#365463;
+  --accent:#5FC2DC; --accent-ink:#9BDCEE; --accent-soft:#122F3A;
+  --signal:#E7A44A; --signal-soft:#332711;
+  --good:#5FC48E; --good-soft:#12301F;
+  --danger:#F08C7F; --danger-soft:#381915;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--body);font-size:16.5px;line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-ink);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:3px}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.1em .38em;border-radius:4px;word-break:break-word}
+
+.masthead{background:var(--surface);border-bottom:1px solid var(--line)}
+.masthead-inner{max-width:1180px;margin:0 auto;padding:3.4rem 1.5rem 2.6rem}
+.eyebrow{
+  font-family:var(--mono);font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 .9rem;
+}
+h1{
+  font-family:var(--display);font-weight:700;
+  font-size:clamp(2.1rem,6vw,3.4rem);line-height:1.22;margin:0 0 .9rem;
+  text-wrap:balance;letter-spacing:.01em;
+}
+.standfirst{font-size:1.12rem;color:var(--ink-soft);margin:0;max-width:52ch}
+.rules-strip{
+  display:grid;gap:.7rem;margin-top:2rem;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+}
+.rule-chip{
+  background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:.75rem .9rem;
+}
+.rule-chip dt{font-size:.78rem;color:var(--ink-faint);margin:0 0 .15rem}
+.rule-chip dd{margin:0;font-family:var(--mono);font-size:1.02rem;font-weight:500;color:var(--accent-ink)}
+
+.shell{
+  max-width:1180px;margin:0 auto;padding:0 1.5rem 5rem;
+  display:grid;grid-template-columns:1fr;gap:2.5rem;
+}
+@media (min-width:1000px){
+  .shell{grid-template-columns:236px minmax(0,1fr);gap:3.5rem;align-items:start}
+}
+.index{position:sticky;top:1rem;align-self:start;margin-top:2.5rem}
+.index h2{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);margin:0 0 .9rem;font-weight:500;
+}
+.index ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.15rem}
+.index a{
+  display:block;text-decoration:none;color:var(--ink-soft);font-size:.93rem;
+  padding:.42rem .6rem;border-radius:7px;border-left:2px solid transparent;
+}
+.index a:hover{background:var(--surface);color:var(--ink)}
+.index a.is-current{background:var(--surface);color:var(--accent-ink);font-weight:500;border-left-color:var(--accent)}
+.toc-toggle{display:none}
+@media (max-width:999px){
+  .index{position:static;margin-top:1.75rem}
+  .toc-toggle{
+    display:block;width:100%;text-align:start;cursor:pointer;
+    font-family:var(--body);font-size:.95rem;font-weight:500;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;
+  }
+  .index ol{max-height:0;overflow:hidden;transition:max-height .28s ease;background:var(--surface);border-radius:10px}
+  .index.open ol{max-height:30rem;margin-top:.5rem;padding:.5rem}
+}
+
+main{min-width:0;padding-top:2.5rem}
+section{scroll-margin-top:1.5rem;margin-bottom:3.6rem}
+h2{font-family:var(--display);font-weight:700;font-size:1.66rem;line-height:1.35;margin:0 0 .9rem;text-wrap:balance}
+h3{font-family:var(--display);font-size:1.14rem;font-weight:600;margin:2rem 0 .6rem}
+p{margin:0 0 1.05rem;max-width:66ch}
+.lede{color:var(--ink-soft);max-width:64ch}
+ul.plain{margin:0 0 1.05rem;padding-inline-start:1.2rem;max-width:64ch}
+ul.plain li{margin-bottom:.4rem}
+
+.note{
+  border:1px solid var(--line);border-inline-start:4px solid var(--accent);
+  background:var(--surface);border-radius:0 10px 10px 0;
+  padding:1.05rem 1.2rem;margin:1.5rem 0;box-shadow:var(--shadow);
+}
+.note.warn{border-inline-start-color:var(--signal);background:var(--signal-soft)}
+.note.good{border-inline-start-color:var(--good);background:var(--good-soft)}
+.note-title{font-weight:700;margin:0 0 .4rem;font-size:.95rem}
+.note p{max-width:none}
+.note p:last-child{margin-bottom:0}
+
+figure{
+  margin:2rem 0;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:1.4rem 1.2rem 1rem;box-shadow:var(--shadow);overflow-x:auto;
+}
+figure svg{display:block;max-width:100%;height:auto;margin:0 auto;color:var(--ink-soft)}
+figcaption{
+  margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line);
+  font-size:.88rem;color:var(--ink-soft);line-height:1.7;
+}
+figcaption b{color:var(--ink)}
+
+.table-wrap{overflow-x:auto;margin:1.5rem 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:560px}
+th,td{text-align:start;padding:.7rem .9rem;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{
+  background:var(--surface-2);font-size:.76rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-soft);font-weight:700;white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td.yes{color:var(--good);font-weight:700}
+td.no{color:var(--ink-faint)}
+.tag{
+  display:inline-block;font-size:.76rem;font-family:var(--mono);
+  padding:.1rem .5rem;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink-soft);
+}
+.tag.ok{background:var(--good-soft);color:var(--good);border-color:transparent}
+.tag.warn{background:var(--signal-soft);color:var(--signal);border-color:transparent}
+.tag.no{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+
+footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color:var(--ink-faint);font-size:.86rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">系統說明 ・ v1.0</p>
+    <h1>會議室預約系統</h1>
+    <p class="standfirst">一套給約 200 人組織使用的會議室預約系統。它和一般預約系統最大的差別是：<b>每位成員有優先等級，較高等級可以覆蓋較低等級已經訂走的時段</b>。</p>
+    <dl class="rules-strip">
+      <div class="rule-chip"><dt>時段單位</dt><dd>30 分鐘</dd></div>
+      <div class="rule-chip"><dt>單次最長</dt><dd>4 小時</dd></div>
+      <div class="rule-chip"><dt>可預約範圍</dt><dd>60 天內</dd></div>
+      <div class="rule-chip"><dt>優先等級</dt><dd>1 – 10</dd></div>
+      <div class="rule-chip"><dt>保護時間</dt><dd>120 分鐘</dd></div>
+      <div class="rule-chip"><dt>時區</dt><dd>台北</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="index" id="index" aria-label="目錄">
+    <h2>目錄</h2>
+    <button class="toc-toggle" id="tocToggle" aria-expanded="false" aria-controls="tocList">☰ 目錄</button>
+    <ol id="tocList">
+      <li><a href="#what">這套系統在做什麼</a></li>
+      <li><a href="#roles">誰可以做什麼</a></li>
+      <li><a href="#lifecycle">帳號的一生</a></li>
+      <li><a href="#booking">預約規則</a></li>
+      <li><a href="#preemption">覆蓋機制</a></li>
+      <li><a href="#overlap">為什麼整筆取消</a></li>
+      <li><a href="#emails">系統會寄哪些信</a></li>
+      <li><a href="#admin">管理後台</a></li>
+      <li><a href="#limits">已知限制</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="what">
+      <h2>這套系統在做什麼</h2>
+      <p class="lede">成員登入後可以看到所有會議室的當日狀況，選一個空的時段預約。如果那個時段已經有人，而你的等級比對方高，系統會問你要不要覆蓋——覆蓋不是靜悄悄發生的，一定要你親自確認。</p>
+      <ul class="plain">
+        <li><b>成員</b>：註冊 → 等管理員審核 → 瀏覽空檔 → 預約 → 收到確認信 → 會議前收到提醒信</li>
+        <li><b>管理員</b>：審核註冊 → 發送邀請 → 調整成員等級 → 管理會議室 → 調整規則 → 查看覆蓋紀錄</li>
+      </ul>
+      <div class="note">
+        <p class="note-title">預約紀錄永遠不會被刪除</p>
+        <p>取消或被覆蓋的預約只會改變狀態，資料永久保留。你隨時可以在「我的預約」看到自己曾經被覆蓋過哪些時段、以及原因。</p>
+      </div>
+    </section>
+
+    <section id="roles">
+      <h2>誰可以做什麼</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>功能</th><th>訪客</th><th>待審核成員</th><th>正式成員</th><th>管理員</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>瀏覽會議室空檔</td><td class="no">—</td><td class="yes">唯讀</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>建立預約</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>取消自己的預約</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>覆蓋較低等級的預約</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>審核註冊、發送邀請</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>調整成員等級</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>管理會議室與系統設定</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>查看覆蓋紀錄</td><td class="no">—</td><td class="no">—</td><td class="yes">僅自己</td><td class="yes">全部</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note warn">
+        <p class="note-title">管理員身分不等於高優先權</p>
+        <p>管理員可以管理系統，但在搶會議室這件事上和大家一樣——決定誰能覆蓋誰的，<b>只有等級數字</b>。一位等級 3 的管理員無法覆蓋等級 5 的一般成員。</p>
+      </div>
+    </section>
+
+    <section id="lifecycle">
+      <h2>帳號的一生</h2>
+      <p class="lede">有兩條路可以成為正式成員。自行註冊要經過驗證與審核；由管理員發出邀請則一步到位。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 330" role="img" aria-label="自行註冊需經過信箱驗證與管理員審核；邀請連結則直接成為正式成員；正式成員可被停權與復權">
+          <defs>
+            <marker id="l-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="l-ah-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#1C6E47"/>
+            </marker>
+            <marker id="l-ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#A32D22"/>
+            </marker>
+          </defs>
+
+          <!-- self registration row -->
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="14" y="86" width="150" height="60" rx="9"/>
+            <rect x="236" y="86" width="150" height="60" rx="9"/>
+          </g>
+          <rect x="458" y="86" width="150" height="60" rx="9" fill="none" stroke="#1C6E47" stroke-width="2"/>
+          <g font-family="Noto Sans TC, sans-serif" fill="currentColor" font-size="13.5">
+            <text x="89" y="112" text-anchor="middle">待驗證信箱</text>
+            <text x="89" y="132" text-anchor="middle" font-size="11" opacity=".75">自行註冊</text>
+            <text x="311" y="112" text-anchor="middle">待審核</text>
+            <text x="311" y="132" text-anchor="middle" font-size="11" opacity=".75">可唯讀瀏覽</text>
+          </g>
+          <text x="533" y="112" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#1C6E47">正式成員</text>
+          <text x="533" y="132" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".75">可以預約</text>
+
+          <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#l-ah)">
+            <path d="M164,116 H230"/>
+          </g>
+          <path d="M386,116 H452" fill="none" stroke="#1C6E47" stroke-width="2" marker-end="url(#l-ah-g)"/>
+          <g font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">
+            <text x="197" y="106" text-anchor="middle">點驗證信</text>
+            <text x="419" y="106" text-anchor="middle">管理員核准</text>
+          </g>
+
+          <!-- rejected -->
+          <path d="M311,146 V196" fill="none" stroke="#A32D22" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#l-ah-d)"/>
+          <rect x="236" y="204" width="150" height="48" rx="9" fill="none" stroke="#A32D22" stroke-width="1.5"/>
+          <text x="311" y="234" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13" fill="#A32D22">已拒絕</text>
+          <text x="356" y="176" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">拒絕</text>
+
+          <!-- invite shortcut -->
+          <rect x="14" y="204" width="150" height="60" rx="9" fill="none" stroke="#0F6079" stroke-width="2"/>
+          <text x="89" y="230" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13.5" font-weight="700" fill="#0F6079">邀請連結</text>
+          <text x="89" y="250" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".75">管理員發出</text>
+          <path d="M164,234 H420 Q446,234 446,180 V152" fill="none" stroke="#0F6079" stroke-width="2" marker-end="url(#l-ah-g)"/>
+          <text x="290" y="226" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="#0F6079">免驗證、免審核，直接啟用</text>
+
+          <!-- suspend -->
+          <rect x="680" y="86" width="150" height="60" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="755" y="120" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13.5" fill="currentColor">已停權</text>
+          <path d="M608,104 H674" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#l-ah)"/>
+          <path d="M674,130 H614" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#l-ah)"/>
+          <g font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">
+            <text x="641" y="96" text-anchor="middle">停權</text>
+            <text x="641" y="152" text-anchor="middle">復權</text>
+          </g>
+
+          <text x="440" y="300" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor" opacity=".8">停權不會自動取消該成員既有的預約，需要管理員另外處理</text>
+        </svg>
+        <figcaption><b>邀請連結之所以能跳過兩道關卡，是因為它本身就證明了信箱有效。</b>能點開那封信的人，就是那個信箱的擁有者，再寄一次驗證信沒有意義；而邀請本身已經是管理員的核准動作。</figcaption>
+      </figure>
+
+      <div class="note">
+        <p class="note-title">註冊頁面不會告訴你某個信箱是否已經註冊過</p>
+        <p>無論輸入的信箱是新的還是已存在，畫面都顯示同一句「請至信箱查收」。這是為了避免有人拿註冊頁面來試探公司裡有誰。已存在的信箱會收到一封「你已經有帳號了」的通知信。</p>
+      </div>
+    </section>
+
+    <section id="booking">
+      <h2>預約規則</h2>
+      <p class="lede">送出預約時，系統會依固定順序檢查以下條件，任何一項不符就會明確告訴你是哪一項。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>檢查項目</th><th>預設值</th><th>可否調整</th></tr></thead>
+          <tbody>
+            <tr><td>帳號已通過審核</td><td>—</td><td class="no">—</td></tr>
+            <tr><td>會議室啟用中</td><td>—</td><td class="no">—</td></tr>
+            <tr><td>起訖時間落在時段格線上</td><td>30 分鐘</td><td class="yes">可調</td></tr>
+            <tr><td>單次時長上限</td><td>240 分鐘</td><td class="yes">可調</td></tr>
+            <tr><td>開始時間必須在未來</td><td>—</td><td class="no">—</td></tr>
+            <tr><td>可預約的最遠日期</td><td>60 天</td><td class="yes">可調</td></tr>
+            <tr><td>在會議室開放時段內、不可跨午夜</td><td>08:00–22:00</td><td class="yes">可調</td></tr>
+            <tr><td>個人未來預約筆數上限</td><td>依等級 3–20 筆</td><td class="yes">可調</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>所有「可調」的項目都在<b>管理後台 → 系統設定</b>，改完立即生效，不需要重新部署。每間會議室也可以有自己的開放時段，覆寫全域預設值。</p>
+    </section>
+
+    <section id="preemption">
+      <h2>覆蓋機制</h2>
+      <p class="lede">這是整套系統最需要理解的部分。只有三種可能的結果，而且覆蓋永遠需要你親自按下確認。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 430" role="img" aria-label="送出預約後的三種結果：可預約、需確認覆蓋、無法預約，以及各自的判斷條件">
+          <defs>
+            <marker id="p-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="p-ah-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#1C6E47"/>
+            </marker>
+            <marker id="p-ah-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#A65A00"/>
+            </marker>
+            <marker id="p-ah-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#A32D22"/>
+            </marker>
+          </defs>
+
+          <rect x="330" y="14" width="220" height="52" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="440" y="45" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="currentColor">送出預約</text>
+
+          <path d="M440,66 V104" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#p-ah)"/>
+          <rect x="310" y="106" width="260" height="52" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="440" y="137" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13.5" fill="currentColor">這個時段有人訂了嗎？</text>
+
+          <!-- no overlap -->
+          <path d="M310,132 H150 Q120,132 120,168 V206" fill="none" stroke="#1C6E47" stroke-width="2" marker-end="url(#p-ah-g)"/>
+          <text x="196" y="122" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="#1C6E47">沒有</text>
+          <rect x="24" y="212" width="192" height="60" rx="9" fill="none" stroke="#1C6E47" stroke-width="2"/>
+          <text x="120" y="238" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#1C6E47">可預約</text>
+          <text x="120" y="258" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".8">直接成立</text>
+
+          <!-- overlap -> checks -->
+          <path d="M440,158 V196" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#p-ah)"/>
+          <text x="486" y="182" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">有</text>
+
+          <rect x="286" y="198" width="308" height="98" rx="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="440" y="222" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="12.5" font-weight="700" fill="currentColor">逐一檢查每一筆重疊的預約</text>
+          <text x="440" y="245" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">① 是自己的嗎？</text>
+          <text x="440" y="265" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">② 對方等級是否 ≥ 我？</text>
+          <text x="440" y="285" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">③ 是否已進入保護時間？</text>
+
+          <!-- blocked -->
+          <path d="M594,247 H716" fill="none" stroke="#A32D22" stroke-width="2" marker-end="url(#p-ah-r)"/>
+          <text x="655" y="237" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="#A32D22">任一項成立</text>
+          <rect x="722" y="212" width="146" height="70" rx="9" fill="none" stroke="#A32D22" stroke-width="2"/>
+          <text x="795" y="240" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#A32D22">無法預約</text>
+          <text x="795" y="260" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".8">告知具體原因</text>
+          <text x="795" y="276" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".8">全部維持原狀</text>
+
+          <!-- preemption required -->
+          <path d="M440,296 V336" fill="none" stroke="#A65A00" stroke-width="2" marker-end="url(#p-ah-w)"/>
+          <text x="440" y="320" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="#A65A00">全部都可以覆蓋</text>
+          <rect x="286" y="340" width="308" height="72" rx="9" fill="none" stroke="#A65A00" stroke-width="2"/>
+          <text x="440" y="366" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="14" font-weight="700" fill="#A65A00">需要你確認</text>
+          <text x="440" y="388" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">列出將被取消的預約與對方姓名部門</text>
+          <text x="440" y="405" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor">按下確認才會真的執行</text>
+        </svg>
+        <figcaption><b>三個檢查只要有一項成立就整個擋下來。</b>注意「全部都可以覆蓋」這個條件：如果你的時段同時壓到兩筆預約，其中一筆不能覆蓋，那另一筆也不會被動到——要嘛全部成功，要嘛完全不變。</figcaption>
+      </figure>
+
+      <h3>三條容易誤解的規則</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>情況</th><th>結果</th><th>原因</th></tr></thead>
+          <tbody>
+            <tr><td>等級 5 想覆蓋等級 5</td><td><span class="tag no">不行</span></td><td>必須<b>嚴格高於</b>，同級永遠不能互相覆蓋</td></tr>
+            <tr><td>對方的會議<b>兩小時內</b>就要開始</td><td><span class="tag no">不行</span></td><td>已進入保護時間，讓人不會在出門前被抽走會議室</td></tr>
+            <tr><td>對方的會議<b>已經開始了</b></td><td><span class="tag no">不行</span></td><td>永遠不能覆蓋進行中的會議</td></tr>
+            <tr><td>覆蓋到自己的另一筆預約</td><td><span class="tag no">不行</span></td><td>會提示「您在這個時段已經有預約了」</td></tr>
+            <tr><td>你被降級後，舊預約被覆蓋</td><td><span class="tag warn">會</span></td><td>判斷依據是<b>當下的等級</b>，不是訂位當時的等級</td></tr>
+            <tr><td>被覆蓋的人再去覆蓋更低等級</td><td><span class="tag ok">可以</span></td><td>連鎖覆蓋是允許的，每一次都會留下紀錄</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note warn">
+        <p class="note-title">被覆蓋的人不會知道是誰覆蓋的</p>
+        <p>通知信只會說明「哪一間會議室、哪個時段被取消了」以及重新預約的連結，<b>不會提到覆蓋者的姓名</b>。這是刻意的設計，避免在同事之間造成不必要的摩擦。系統不會自動幫被覆蓋的人另外安排時段，需要自行重新預約。</p>
+      </div>
+    </section>
+
+    <section id="overlap">
+      <h2>為什麼是整筆取消</h2>
+      <p class="lede">只要有任何一分鐘重疊，被覆蓋的那筆預約就<b>整筆</b>取消，不會被切成兩半。</p>
+
+      <figure>
+        <svg viewBox="0 0 880 280" role="img" aria-label="原本 14 點到 16 點的預約，被 15 點半到 16 點半的新預約重疊後整筆取消，而非只切掉重疊的半小時">
+          <!-- time axis -->
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".7">
+            <text x="90" y="34" text-anchor="middle">14:00</text>
+            <text x="278" y="34" text-anchor="middle">15:00</text>
+            <text x="372" y="34" text-anchor="middle">15:30</text>
+            <text x="466" y="34" text-anchor="middle">16:00</text>
+            <text x="654" y="34" text-anchor="middle">16:30</text>
+          </g>
+          <g stroke="currentColor" stroke-width="1" opacity=".25">
+            <line x1="90" y1="42" x2="90" y2="230"/>
+            <line x1="278" y1="42" x2="278" y2="230"/>
+            <line x1="372" y1="42" x2="372" y2="230"/>
+            <line x1="466" y1="42" x2="466" y2="230"/>
+            <line x1="654" y1="42" x2="654" y2="230"/>
+          </g>
+
+          <!-- original booking -->
+          <text x="14" y="76" font-family="Noto Sans TC, sans-serif" font-size="12" fill="currentColor">原本的預約</text>
+          <rect x="90" y="86" width="376" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <text x="278" y="112" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="12.5" fill="currentColor">等級 3 ・ 14:00 – 16:00</text>
+
+          <!-- new booking -->
+          <text x="14" y="164" font-family="Noto Sans TC, sans-serif" font-size="12" fill="currentColor">新的預約</text>
+          <rect x="372" y="150" width="282" height="42" rx="6" fill="none" stroke="#0F6079" stroke-width="2"/>
+          <text x="513" y="176" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="12.5" font-weight="700" fill="#0F6079">等級 5 ・ 15:30 – 16:30</text>
+
+          <!-- overlap marker -->
+          <rect x="372" y="86" width="94" height="42" rx="6" fill="#A65A00" opacity=".16"/>
+          <text x="419" y="66" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="#A65A00">重疊 30 分</text>
+
+          <!-- result -->
+          <line x1="14" y1="214" x2="866" y2="214" stroke="currentColor" stroke-width="1" opacity=".25"/>
+          <text x="14" y="246" font-family="Noto Sans TC, sans-serif" font-size="12.5" font-weight="700" fill="#A32D22">結果</text>
+          <text x="76" y="246" font-family="Noto Sans TC, sans-serif" font-size="12.5" fill="currentColor">整筆 14:00 – 16:00 取消，<tspan font-weight="700" fill="#A32D22">不是</tspan>只砍掉重疊的 30 分鐘</text>
+          <text x="76" y="268" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor" opacity=".8">原本的人收到通知信，14:00 – 15:30 這段也空了出來，任何人都可以再訂</text>
+        </svg>
+        <figcaption><b>只重疊 30 分鐘，卻取消了整整兩小時。</b>這是刻意的：一場被砍掉尾巴的會議通常已經開不成，與其留下一段沒人想用的殘骸，不如整筆釋放、讓原訂的人重新安排。</figcaption>
+      </figure>
+    </section>
+
+    <section id="emails">
+      <h2>系統會寄哪些信</h2>
+      <p class="lede">全部是繁體中文，每封信都會明確寫出台北時間。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>時機</th><th>寄給誰</th><th>內容重點</th></tr></thead>
+          <tbody>
+            <tr><td>自行註冊後</td><td>註冊者</td><td>驗證連結，24 小時內有效</td></tr>
+            <tr><td>管理員核准 / 拒絕</td><td>申請者</td><td>結果通知</td></tr>
+            <tr><td>預約成功</td><td>預約人</td><td>會議室、時間、主題、取消連結</td></tr>
+            <tr><td>預約被覆蓋或被取消</td><td>原預約人</td><td>被取消的時段與原因、重新預約連結<br><span class="tag warn">不含覆蓋者身分</span></td></tr>
+            <tr><td>自行取消</td><td>預約人</td><td>取消確認</td></tr>
+            <tr><td>有新的註冊待審核</td><td>所有管理員</td><td>彙整成摘要，<b>每小時最多一封</b></td></tr>
+            <tr><td>管理員發出邀請</td><td>受邀者</td><td>註冊連結，7 天內有效</td></tr>
+            <tr><td>忘記密碼</td><td>成員</td><td>重設連結，2 小時內有效</td></tr>
+            <tr><td>會議開始前 60 分鐘</td><td>預約人</td><td>提醒；預約已取消則不寄</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <p class="note-title">每天 280 封的安全上限</p>
+        <p>免費方案每天可寄 300 封，系統設在 280 封就開始節流。達到上限時<b>優先停掉會議提醒信</b>；驗證信、邀請信、密碼重設信、以及「你的預約被取消了」這類信件永遠照常寄出，因為漏掉它們會讓人被鎖在系統外或錯過重要變動。</p>
+      </div>
+    </section>
+
+    <section id="admin">
+      <h2>管理後台</h2>
+      <ul class="plain">
+        <li><b>首頁</b>：待審核人數、今日寄信量與上限、提醒信最後執行時間、近期寄信失敗</li>
+        <li><b>審核佇列</b>：姓名、部門、電話、信箱、申請時間，可核准或拒絕</li>
+        <li><b>成員管理</b>：搜尋、依狀態與等級篩選、調整等級、停權與復權</li>
+        <li><b>邀請管理</b>：批次發送、查看未使用的邀請、撤銷</li>
+        <li><b>會議室</b>：新增、編輯、停用與啟用（停用時會先問你要不要一併取消既有預約）</li>
+        <li><b>所有預約</b>：依會議室、成員、日期篩選，可代為取消</li>
+        <li><b>覆蓋紀錄</b>：誰覆蓋了誰、時間、雙方當時的等級</li>
+        <li><b>系統設定</b>：所有規則參數，每一項都附中文說明</li>
+        <li><b>寄信紀錄與操作稽核</b>：可匯出 CSV</li>
+      </ul>
+      <div class="note good">
+        <p class="note-title">稽核紀錄永久保留</p>
+        <p>覆蓋事件、等級調整、審核與拒絕、管理員代為取消、會議室停用，全部永久保留並可匯出，方便日後追查「這個時段當初是怎麼沒的」。</p>
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>已知限制</h2>
+      <ul class="plain">
+        <li><b>首次開啟較慢</b>：免費主機閒置 15 分鐘後休眠，喚醒約需 1 分鐘。</li>
+        <li><b>提醒信排程可能被停用</b>：儲存庫連續 60 天沒有動作時，GitHub 會自動停用排程。管理後台首頁會顯示最後執行時間，發現停住就回去重新啟用。</li>
+        <li><b>排程可能延遲</b>：GitHub 忙碌時排程會晚幾分鐘，提醒信仍會寄出，只是時間不會分秒精準。</li>
+        <li><b>每天 300 封信的上限</b>：以 200 人、每天約 60 筆預約估算是夠用的，但大量發送邀請時要留意。</li>
+      </ul>
+      <h3>這個版本沒有做的功能</h3>
+      <p>行事曆整合（ICS / Google）、週期性重複預約、報到與未到紀錄、與會者邀請、單一登入、自訂網域、繁體中文以外的語言、手機 App、候補名單、被覆蓋後的自動改期建議、單筆預約的簽核流程。</p>
+    </section>
+
+    <footer>
+      <p>會議室預約系統 v1.0 ・ 時區 Asia/Taipei ・ 介面語言 繁體中文 ・ 安裝方式請見《會議室系統安裝手冊》</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  var toggle=document.getElementById('tocToggle');
+  var index=document.getElementById('index');
+  if(toggle){
+    toggle.addEventListener('click',function(){
+      var open=index.classList.toggle('open');
+      toggle.setAttribute('aria-expanded',open?'true':'false');
+    });
+  }
+  var links=Array.prototype.slice.call(document.querySelectorAll('.index a'));
+  var map={};
+  links.forEach(function(a){
+    var el=document.getElementById(a.getAttribute('href').slice(1));
+    if(el)map[el.id]=a;
+  });
+  if(!('IntersectionObserver' in window))return;
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('is-current');});
+        var a=map[e.target.id];
+        if(a)a.classList.add('is-current');
+      }
+    });
+  },{rootMargin:'-10% 0px -75% 0px',threshold:0});
+  Object.keys(map).forEach(function(id){obs.observe(document.getElementById(id));});
+})();
+</script>
