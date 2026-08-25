@@ -61,7 +61,7 @@ app/
                      admin_pages.py                                [Task 6]
   services/
     accounts.py      sessions.py                                   [Task 1]
-    mailer.py        templates.py    transports.py                 [Task 2]
+    mailer.py        email_templates.py  transports.py             [Task 2]
     rooms.py         bookings.py                                   [Task 3]
     preemption.py                                                  [Task 4]
     audit.py                                                       [Task 0]
@@ -148,6 +148,12 @@ change_password(db, user, current_password, new_password) -> User
 
 `RegisterResult` and `InviteResult` are dataclasses carrying
 `emails: list[EmailEvent]` for the caller to enqueue after commit.
+
+Functions whose return type leaves no room for that list — `resend_verification`,
+`request_password_reset`, `approve`, `reject` — enqueue internally, still
+strictly after their own transaction commits. `accounts.drain_dispatched()`
+exposes what they sent, which is how a test recovers the raw one-time token
+(only the hash is ever stored).
 
 Spec rules that are easy to miss: re-registering a `pending_email` address
 resends rather than duplicating; re-registering an `active` address returns the

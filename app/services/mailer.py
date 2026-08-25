@@ -46,8 +46,22 @@ from app.services.transports import Message, Transport, build_transport
 from app.settings import Settings
 from app.timeutil import local_date, now_utc, taipei_midnight
 
-#: Emails dropped first when the daily cap is reached (spec §9.4 / CONTRACT §5).
-_CAPPED_KINDS = frozenset({"E10"})
+#: Spec §9.4 guarantees these still send once the cap is reached, because
+#: losing them would lock someone out of their account or leave them unaware
+#: that a booking of theirs was cancelled.
+_CRITICAL_KINDS = frozenset({"E1", "E5", "E8", "E9"})
+
+#: Reminders are "dropped first" (§9.4). That ordering is enforced by
+#: delivering in priority order -- critical, then ordinary, then reminders --
+#: so a day that only slightly exceeds the cap loses reminders and nothing
+#: else. Anything non-critical still queued once the cap is reached is
+#: dropped too, otherwise the cap would not actually bound the daily volume
+#: and the provider's own 300/day limit (constraint C5) would start rejecting
+#: mail instead.
+_PRIORITY_ORDER = (
+    "CASE WHEN type IN ('E1','E5','E8','E9') THEN 0"
+    " WHEN type = 'E10' THEN 2 ELSE 1 END"
+)
 
 #: Attempts before a failed send becomes terminal (spec §9.4: "retried up to
 #: 3 times ... then marked failed").
@@ -239,7 +253,7 @@ def _send_row(
         _update_row(db, row["id"], status="failed", error="context_unavailable")
         return "failed"
 
-    if row["type"] in _CAPPED_KINDS and sent_today[0] >= cap:
+    if row["type"] not in _CRITICAL_KINDS and sent_today[0] >= cap:
         _update_row(db, row["id"], status="skipped", error="daily_cap_reached")
         _forget(row["id"])
         return "skipped"
@@ -326,7 +340,7 @@ def send_pending(
     rows = db.run_in_transaction(
         lambda conn: conn.query_all(
             "SELECT * FROM email_log WHERE status = 'queued'"
-            " ORDER BY created_at LIMIT ?",
+            f" ORDER BY {_PRIORITY_ORDER}, created_at LIMIT ?",
             (limit,),
         )
     )
