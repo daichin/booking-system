@@ -1,0 +1,155 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository status
+
+This repo currently contains **one file**: `meeting_room_booking_spec.md` — a locked v1.0 build specification for a meeting-room booking system with priority-based preemption. No code, no `package.json`, no git repository yet.
+
+**The stack is not chosen.** Spec §11 Task 0 (Foundation) must complete first: pick and justify a stack against the §2 constraints, write DB migrations for §4, seed §5 settings, and produce `CONTRACT.md` (the typed API contract). Spec §11 states no other task may begin until `CONTRACT.md` exists.
+
+**When Task 0 lands, replace this section** with the real build / test / lint / migrate / single-test commands.
+
+## The spec is the source of truth
+
+`meeting_room_booking_spec.md` is marked *locked* and confirmed with the product owner. Per its cross-cutting rules: if you find a contradiction between the spec and reality (e.g. a free tier that no longer exists), **stop and report it — do not improvise**. Anything the spec does not specify is the implementer's choice, provided it does not violate §2.
+
+## Constraints that shape every technical decision (§2)
+
+- **US$0/month, permanent free tiers only.** No trial credits, no paid analytics or error tracking.
+- **DB free tier must not expire data** — this rules out Render Postgres (90-day expiry). Idle suspension is fine; data loss is not.
+- **Deploy is a GitHub web-UI button** (`workflow_dispatch`). The owner is non-technical and may only have a phone. No local terminal in the normal path.
+- **Free platform subdomain only** (`*.vercel.app`, `*.onrender.com`). Never depend on owning a domain.
+- **Cron via GitHub Actions `schedule`** calling a secret-protected endpoint — no paid scheduler. If the host sleeps (Render), the reminder job must tolerate a ~60s cold start.
+- **Email free tier ≥300/day**; budget ~200/day for 200 users.
+- Verify every provider's current free tier at build time; the §2.1 candidate list is non-binding and dated August 2026.
+
+## Cross-cutting invariants
+
+- **No hardcoded business constants.** Every tunable in §5 (`slot_minutes`, `max_booking_minutes`, `preemption_protection_minutes`, `quota_by_level`, token lifetimes, `daily_email_cap`, …) is read from the `settings` table at runtime, admin-editable.
+- **Times stored UTC, displayed `Asia/Taipei`.** Every email states the local time with an explicit timezone label.
+- **All user-facing text is zh-TW, in a single i18n file** so it can be swapped later.
+- **Never change the DB schema or API contract unilaterally** — raise it to the orchestrator.
+- Booking rows are never deleted. Only `status = 'confirmed'` occupies a room; `cancelled_*` and `preempted` rows are history, kept forever. Same for the audit trails in FR-7.
+- `bookings.level_at_booking` is an **audit-only snapshot**. Preemption decisions always use the owner's *current* `users.level` (§7.3, test C8).
+
+## Preemption engine (§7) — the highest-risk component
+
+Implement **once, in one service function**, with an exhaustive unit + concurrency test suite. It must be independently testable with fixtures. Per §11, it cannot merge without a separate reviewing agent checking concurrency behaviour.
+
+Rules that are easy to get subtly wrong:
+
+- Only a **strictly higher** current level preempts. Equal level never wins.
+- The protection window is evaluated against the **victim's** `start_at`, not the new booking's: a booking is immune once `now >= victim.start_at - preemption_protection_minutes`.
+- Any overlap cancels the victim's booking **in its entirety** — no splitting or trimming.
+- **All-or-nothing**: if a request overlaps several bookings and any one is non-preemptible, the whole request is rejected and nothing changes.
+- Overlapping your own booking is `BLOCKED: SELF_OVERLAP`, never a self-preemption.
+- Admin status grants no preemption privilege; only `level` matters.
+- **Two-phase UX is required.** Phase 1 returns `AVAILABLE` / `PREEMPTION_REQUIRED(victims)` / `BLOCKED(reason)`. Phase 2 commits only on explicit confirmation and **re-runs the entire check inside the transaction** — never trust the phase-1 result.
+- Concurrency: `SELECT … FOR UPDATE` on the overlap set, or `SERIALIZABLE` + retry-on-conflict. Two simultaneous attempts on the same victim must yield exactly one winner, one victim record, and one E5 email.
+- **Emails are enqueued only after commit.** Sending inside the transaction risks a "your booking was cancelled" email for a booking that a rollback preserved.
+- Preemption must cancel the victim's pending E10 reminder.
+- E5 names the room and time but **never the preempting user**; `BLOCKED` responses expose the blocker's name and department, never their email.
+
+## Booking validation order (§6.5)
+
+Validate in the spec's order with a distinct error message per failure: active user → active room → 30-min boundaries and `end > start` → duration ≤ max → start in future → within horizon → inside the room's open/close window and not crossing midnight → level quota on *future confirmed* bookings → conflict resolution per §7.
+
+## Account lifecycle (§6.1)
+
+```
+pending_email --verify--> pending_approval --approve--> active
+                                           --reject---> rejected
+(invite link)  ------------------------------------> active
+active --admin suspend--> suspended --reactivate--> active
+```
+
+The invitation path is deliberately shorter: clicking an admin-issued invite link proves the address, so the account is created directly as `active` with `email_verified_at` set — **no verification email and no approval step**. Pending members can log in and view availability read-only; every booking action must explain they are awaiting approval. Registration attempts must never confirm or deny that an account exists.
+
+## Email subsystem (§9)
+
+Ten templates E1–E10 behind a provider adapter interface, with a **fake transport for tests**. `email_log` backs retries (3 with backoff), the admin log, and the daily quota guard. When `daily_email_cap` is exceeded, **drop E10 reminders first** — E1, E5, E8, E9 must still send. E7 admin notices are batched to at most one digest per admin per hour. The reminder cron endpoint must be **idempotent**: a double invocation must not double-send. Known limitation to document in `SETUP.md`: GitHub Actions schedules drift under load and auto-disable after 60 days of repo inactivity, so the admin dashboard must surface "last reminder job ran at ___".
+
+## Deployment deliverables (§10)
+
+`.github/workflows/deploy.yml` (`workflow_dispatch`: install → lint → test → build → migrate → deploy → smoke-test `/api/health` → print the live URL; fails loudly naming any missing secret), `.github/workflows/reminders.yml` (`*/15 * * * *`), `SETUP.md` and `ROLLBACK.md` **written in Traditional Chinese for a non-developer**, and idempotent first-run seeding (settings row, admin account from secrets, 3 example rooms).
+
+Secrets, named exactly: `DATABASE_URL`, `EMAIL_PROVIDER_API_KEY`, `EMAIL_FROM_ADDRESS`, `APP_BASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_INITIAL_PASSWORD`, `CRON_SECRET`, plus the host's deploy token.
+
+The seeded admin account **must be forced to change its password on first login**.
+
+## Definition of done
+
+Spec §12 groups A–E are the acceptance tests; Task 8 implements them as automated tests plus a manual pass on a real phone. The build is not done until every scenario passes. Group C (preemption) is the critical set. Mobile-responsive is a requirement, not a nice-to-have.
+
+## Out of scope for v1 (§13)
+
+Calendar/ICS integration, recurring bookings, check-in/no-show tracking, attendee invitations, SSO/LDAP, custom domains, languages beyond zh-TW, mobile apps, waiting lists, automatic rebooking suggestions, per-booking approval workflows.
+
+
+# CLAUDE.md
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
