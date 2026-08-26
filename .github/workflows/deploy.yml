@@ -32,10 +32,12 @@ jobs:
       - name: 取得程式碼
         uses: actions/checkout@v4
 
-      - name: 安裝 Python 3.13
+      # 版本來源是根目錄的 .python-version，Render 也讀同一個檔案，
+      # 確保這裡測過的版本就是正式環境跑的版本。
+      - name: 安裝 Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version-file: '.python-version'
 
       # 這一步會列出所有缺少的 Secret 名稱後失敗（spec §12 E2）。
       - name: 檢查必要的 Secrets

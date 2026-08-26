@@ -6,5 +6,9 @@
 # installed solely by the deploy workflow / Render build step, because
 # production talks to a real Postgres database over `gunicorn`.
 
-psycopg[binary]==3.2.3
+# psycopg 的預編譯套件 (psycopg-binary) 必須有對應 Python 版本的檔案。
+# 3.2.3 沒有 Python 3.14 的版本，因此 Render 在使用預設的 3.14 時建置失敗。
+# 3.2.13 同時支援 3.13 與 3.14，即使主機的 Python 版本改變也不會再壞。
+# 真正決定 Python 版本的是根目錄的 .python-version（見該檔說明）。
+psycopg[binary]==3.2.13
 gunicorn==23.0.0

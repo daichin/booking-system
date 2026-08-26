@@ -228,3 +228,37 @@ class PackagingTests(unittest.TestCase):
 
     def test_render_does_not_auto_deploy_on_push(self):
         self.assertIn("autoDeploy: false", read(ROOT / "render.yaml"))
+
+    def test_the_python_version_is_pinned_where_render_actually_reads_it(self):
+        """Render ignores runtime.txt; without a pin it picks its own default.
+
+        That is how a build ended up on Python 3.14 when every test had only
+        ever run on 3.13.
+        """
+        path = ROOT / ".python-version"
+        self.assertTrue(path.is_file(), "missing .python-version")
+        self.assertRegex(read(path).strip(), r"^3\.\d+(\.\d+)?$")
+
+    def test_every_declaration_of_the_python_version_agrees(self):
+        pinned = read(ROOT / ".python-version").strip()
+        self.assertIn(
+            pinned,
+            read(ROOT / "runtime.txt"),
+            "runtime.txt disagrees with .python-version",
+        )
+        self.assertIn(
+            pinned,
+            read(ROOT / "render.yaml"),
+            "render.yaml's PYTHON_VERSION disagrees with .python-version",
+        )
+
+    def test_the_suite_runs_on_the_version_production_will_use(self):
+        """A pin that does not match the interpreter here proves nothing."""
+        import sys
+
+        pinned = read(ROOT / ".python-version").strip()
+        running = f"{sys.version_info.major}.{sys.version_info.minor}"
+        self.assertTrue(
+            pinned.startswith(running),
+            f"tests run on Python {running} but production is pinned to {pinned}",
+        )

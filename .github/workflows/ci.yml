@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version-file: '.python-version'
 
       - name: 語法檢查
         run: python -m compileall -q app tests manage.py serve.py
@@ -57,7 +57,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version-file: '.python-version'
 
       - name: 安裝 Postgres 驅動程式
         run: |
