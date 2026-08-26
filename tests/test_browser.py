@@ -276,3 +276,101 @@ class JumpDropdownBrowserTests(BrowserTestCase):
         box = self.page.locator(f"#room-{last_room.id}").bounding_box()
         self.assertGreaterEqual(box["y"], 0)
         self.assertLess(box["y"], self.viewport["height"])
+
+
+class InPlaceNavigationBrowserTests(BrowserTestCase):
+    """Moving around the grid must not move the page under you.
+
+    Cancelling a selection used to reload the page and then jump to the slot
+    fragment, shifting the view by a few hundred pixels for no reason the
+    member could see.
+    """
+
+    def select_a_slot(self, index: int = 18, scroll_to: int = 700) -> float:
+        self.login()
+        self.page.evaluate(f"window.scrollTo(0, {scroll_to})")
+        self.wait_until(f"window.pageYOffset >= {min(scroll_to, 400)}")
+        self.page.locator("a.slot-action").nth(index).click()
+        self.page.wait_for_selector("li.slot.is-start", timeout=5000)
+        return self.scroll_y()
+
+    def test_cancelling_a_selection_does_not_move_the_page(self):
+        before = self.select_a_slot()
+        self.page.locator(".selection-banner a").first.click()
+        self.page.wait_for_selector("li.slot.is-start", state="detached", timeout=5000)
+
+        after = self.scroll_y()
+        self.assertLess(
+            abs(after - before), 60, f"cancelling moved the page {before} -> {after}"
+        )
+
+    def test_cancelling_swaps_in_place_rather_than_reloading(self):
+        self.select_a_slot()
+        self.page.evaluate("document.documentElement.removeAttribute('data-swapped')")
+        self.page.locator(".selection-banner a").first.click()
+        self.page.wait_for_selector("li.slot.is-start", state="detached", timeout=5000)
+        self.assertEqual(self.page.get_attribute("html", "data-swapped"), "true")
+
+    def test_changing_day_keeps_your_place(self):
+        self.login()
+        self.page.evaluate("window.scrollTo(0, 700)")
+        self.wait_until("window.pageYOffset >= 400")
+        before = self.scroll_y()
+
+        # Click through the DOM rather than Playwright's click, which scrolls
+        # the target into view first -- the date bar is at the top of the
+        # page, so that would move us to 0 before the click even happened and
+        # the test would be measuring its own setup.
+        self.page.eval_on_selector(
+            '.date-bar a[href^="/day?"]:last-of-type', "el => el.click()"
+        )
+        self.wait_until("document.documentElement.dataset.swapped === 'true'")
+
+        after = self.scroll_y()
+        self.assertLess(
+            abs(after - before), 60, f"changing day moved the page {before} -> {after}"
+        )
+
+    def test_the_date_picker_also_swaps_in_place(self):
+        from datetime import timedelta
+
+        from app.timeutil import local_date, now_utc
+
+        self.login()
+        target = (local_date(now_utc()) + timedelta(days=5)).isoformat()
+        self.page.fill('.date-jump input[name="date"]', target)
+        self.page.click('.date-jump button[type="submit"]')
+        self.wait_until("document.documentElement.dataset.swapped === 'true'")
+        self.assertIn(target, self.page.url)
+
+    def test_crossing_to_another_page_updates_the_nav_marker(self):
+        """The nav sits outside the swapped region, so it needs updating too."""
+        self.login()
+        self.page.goto(f"{self.base}/week")
+        self.page.wait_for_selector("a.slot-action", timeout=5000)
+
+        self.page.locator("a.slot-action").first.click()
+        self.wait_until("document.documentElement.dataset.swapped === 'true'")
+
+        current = self.page.eval_on_selector_all(
+            '.site-nav a[aria-current="page"]',
+            "links => links.map(l => l.getAttribute('href'))",
+        )
+        self.assertEqual(current, ["/day"], f"nav still marks {current}")
+
+    def test_the_page_title_follows_too(self):
+        self.login()
+        self.page.goto(f"{self.base}/week")
+        self.page.wait_for_selector("a.slot-action", timeout=5000)
+        before = self.page.title()
+
+        self.page.locator("a.slot-action").first.click()
+        self.wait_until("document.documentElement.dataset.swapped === 'true'")
+        self.assertNotEqual(self.page.title(), before)
+
+    def test_nav_links_themselves_still_navigate_normally(self):
+        """They are plain /day and /week, and must not be intercepted."""
+        self.login()
+        self.page.click('.site-nav a[href="/week"]')
+        self.page.wait_for_url("**/week")
+        self.assertTrue(self.page.url.endswith("/week"))
