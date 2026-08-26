@@ -55,7 +55,11 @@ def main() -> int:
     # both here and again inside `create_app`) sees them.
     from app.config import load_config
     from app.db import create_database
-    from app.web.app import bootstrap, create_app
+    from app.web.app import bootstrap, configure_logging, create_app
+
+    # Same request log locally as in production, so a problem reproduced here
+    # looks identical to what the Render dashboard shows.
+    configure_logging()
 
     config = load_config()
     db = create_database(config.database_url)

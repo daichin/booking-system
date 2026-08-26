@@ -7,6 +7,7 @@ optionally, so the app still boots when a task's pages are not present yet.
 from __future__ import annotations
 
 import importlib
+import os
 from typing import Any
 
 from app import __version__
@@ -190,8 +191,28 @@ def bootstrap(db: Database, config: Config) -> dict[str, Any]:
     return result
 
 
+def configure_logging(level: str | None = None) -> None:
+    """Send application logs to stdout.
+
+    Render (and most hosts) collect stdout, so this is what makes a failing
+    request visible in the dashboard. ``LOG_LEVEL=DEBUG`` turns up the detail
+    without a redeploy of anything but the environment variable.
+    """
+    import logging
+    import sys
+
+    logging.basicConfig(
+        level=(level or os.environ.get("LOG_LEVEL") or "INFO").upper(),
+        format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,
+    )
+
+
 def build_wsgi_app():  # pragma: no cover - production entry point
     """Module-level callable for ``gunicorn app.web.app:build_wsgi_app()``."""
+    configure_logging()
     config = load_config()
     db = create_database(config.database_url)
     bootstrap(db, config)

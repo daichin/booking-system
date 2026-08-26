@@ -136,12 +136,24 @@ def _parse_times(data: dict) -> tuple[datetime, datetime]:
         except ValueError:
             raise AppError(MISSING_FIELD, {"field": "start_at"})
 
+    # Parse each field on its own. Wrapping all three in one try meant any
+    # failure was reported as a missing "date", which sent people looking at
+    # the one field that was actually fine.
     try:
         day = date.fromisoformat(str(data.get("date", "")))
-        start_minutes = parse_hhmm(str(data.get("start_time", "")))
-        end_minutes = parse_hhmm(str(data.get("end_time", "")))
     except (ValueError, TypeError):
         raise AppError(MISSING_FIELD, {"field": "date"})
+
+    try:
+        start_minutes = parse_hhmm(str(data.get("start_time", "")))
+    except (ValueError, TypeError):
+        raise AppError(MISSING_FIELD, {"field": "start_time"})
+
+    try:
+        end_minutes = parse_hhmm(str(data.get("end_time", "")))
+    except (ValueError, TypeError):
+        raise AppError(MISSING_FIELD, {"field": "end_time"})
+
     return combine_taipei(day, start_minutes), combine_taipei(day, end_minutes)
 
 
@@ -208,8 +220,11 @@ def _pending_notice(user: models.User) -> Markup:
 
 def _booking_panel(request: Request, room_days: list, day: date, settings: Settings) -> Markup:
     room_options = [option(rd.room.name, value=rd.room.id) for rd in room_days]
+    # The value must be the same "HH:MM" form the submitted value is parsed
+    # back from. Sending minutes-past-midnight here instead made every
+    # booking fail, because the parser only understands "HH:MM".
     time_options = [
-        option(format_hhmm(minute), value=str(minute))
+        option(format_hhmm(minute), value=format_hhmm(minute))
         for minute in range(0, 24 * 60 + 1, settings.slot_minutes)
     ]
     return div(

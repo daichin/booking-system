@@ -33,6 +33,25 @@ STRINGS: dict[str, str] = {
     "nav.skip": "跳到主要內容",
     "error.page_title": "發生問題",
 
+    # --- 欄位名稱：錯誤訊息把機器欄位名換成這些字 -----------------------------
+    "field.date": "日期",
+    "field.start_time": "開始時間",
+    "field.end_time": "結束時間",
+    "field.start_at": "開始時間",
+    "field.end_at": "結束時間",
+    "field.title": "會議主題",
+    "field.room_id": "會議室",
+    "field.name": "名稱",
+    "field.capacity": "容納人數",
+    "field.open_time": "開放時間",
+    "field.close_time": "關閉時間",
+    "field.email": "電子郵件",
+    "field.password": "密碼",
+    "field.full_name": "姓名",
+    "field.department": "部門",
+    "field.phone": "電話",
+    "field.level": "等級",
+
     # --- booking validation, spec §6.5 -------------------------------------
     "error.NOT_ACTIVE": "您的帳號尚未通過管理員審核，目前無法預約。",
     "error.ROOM_INACTIVE": "此會議室已停用，無法預約。",

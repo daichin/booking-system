@@ -12,8 +12,10 @@ error rendering. Anything resembling business logic belongs in
 from __future__ import annotations
 
 import json
+import logging
 import re
 import secrets
+import time
 from dataclasses import dataclass, field
 from http.cookies import SimpleCookie
 from typing import Any, Callable, Iterable
@@ -33,6 +35,8 @@ SESSION_COOKIE = "session"
 CSRF_COOKIE = "csrf"
 CSRF_FIELD = "_csrf"
 CSRF_HEADER = "HTTP_X_CSRF_TOKEN"
+
+log = logging.getLogger("app.web")
 
 _MAX_BODY = 1 << 20  # 1 MB is ample for these forms and refuses silly payloads
 
@@ -291,15 +295,24 @@ class WSGIApp:
 
     def __call__(self, environ: dict[str, Any], start_response) -> Iterable[bytes]:
         request = Request(environ)
+        started = time.monotonic()
+        failure: str = ""
         try:
             response = self.dispatch(request)
         except AppError as error:
+            # A rejected request is the single most useful thing to see in a
+            # production log: without the code and details, a 400 in the
+            # access log says only "something was wrong somewhere".
+            failure = _describe_error(error)
             response = self.render_error(request, error)
-        except Exception:  # noqa: BLE001 - never leak a stack trace to a user
-            import traceback
-
-            traceback.print_exc()
+        except Exception as exc:  # noqa: BLE001 - never leak a stack trace to a user
+            failure = f"{type(exc).__name__}: {exc}"
+            log.exception(
+                "unhandled error on %s %s", request.method, request.path
+            )
             response = self.render_error(request, AppError("INTERNAL"), status=500)
+
+        self._log_request(request, response, started, failure)
 
         if self.after_request is not None:
             response = self.after_request(request, response) or response
@@ -334,6 +347,27 @@ class WSGIApp:
 
         return route.handler(request)
 
+    def _log_request(
+        self, request: Request, response: Response, started: float, failure: str
+    ) -> None:
+        """One line per request, with the reason when it was refused."""
+        duration_ms = (time.monotonic() - started) * 1000
+        who = getattr(request.user, "id", None)
+        line = "%s %s -> %d (%.0fms)"
+        args: list[Any] = [request.method, request.path, response.status, duration_ms]
+        if who:
+            line += " user=%s"
+            args.append(who[:8])
+        if failure:
+            line += " reason=%s"
+            args.append(failure)
+        if response.status >= 500:
+            log.error(line, *args)
+        elif response.status >= 400:
+            log.warning(line, *args)
+        else:
+            log.info(line, *args)
+
     def render_error(
         self, request: Request, error: AppError, status: int | None = None
     ) -> Response:
@@ -346,8 +380,44 @@ class WSGIApp:
         from app.web.layout import error_page
 
         return Response.html(
-            error_page(request, code, error_message(error.code, **error.details)), code
+            error_page(request, code, error_message(error.code, **_humanise(error.details))),
+            code,
         )
+
+
+def _describe_error(error: AppError) -> str:
+    """One-line summary of a rejected request, safe to write to a log.
+
+    Details are included because they carry the *why* -- which field, which
+    quota, which blocking rule. Anything that could identify a person is
+    dropped: logs are read by whoever runs the server, not just admins.
+    """
+    redacted = {
+        key: value
+        for key, value in error.details.items()
+        if key not in _SENSITIVE_DETAIL_KEYS
+    }
+    return f"{error.code} {redacted}" if redacted else error.code
+
+
+#: Never write these to the log, even though the app may use them internally.
+_SENSITIVE_DETAIL_KEYS = frozenset({"email", "to_email", "owner", "blocker", "token"})
+
+
+def _humanise(details: dict[str, Any]) -> dict[str, Any]:
+    """Translate machine field names before they reach a person.
+
+    Services raise ``MISSING_FIELD`` with ``field="start_time"``; showing a
+    member the literal column name is not an error message. Anything without
+    a translation falls through unchanged.
+    """
+    if "field" not in details:
+        return details
+    readable = dict(details)
+    key = f"field.{details['field']}"
+    label = t(key)
+    readable["field"] = details["field"] if label == key else label
+    return readable
 
 
 _REASONS = {

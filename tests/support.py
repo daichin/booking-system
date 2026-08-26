@@ -8,6 +8,7 @@ task's code is mid-change.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -24,6 +25,10 @@ from app.timeutil import combine_taipei, local_date, now_utc
 
 # Tests create many accounts; full scrypt cost would dominate the runtime.
 security.configure(n=1 << 10)
+
+# Keep the suite's output readable. Tests that care about the request log
+# use assertLogs, which installs its own handler regardless of this.
+logging.getLogger("app.web").setLevel(logging.CRITICAL)
 
 
 #: Point this at a real Postgres to run the entire suite against the
