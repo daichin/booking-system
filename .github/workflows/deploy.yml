@@ -83,12 +83,14 @@ jobs:
       - name: 等待新版本上線
         run: sleep 45
 
-      # 冷啟動可能要 60 秒，因此重試多次（spec §2.1）。
+      # 冷啟動約 60 秒，但「第一次」部署還要加上安裝套件與建置的時間，
+      # 在免費方案上可能要 5 到 10 分鐘。重試上限抓得寬鬆一些，
+      # 免得建置其實正在進行、工作卻先放棄了（spec §2.1）。
       - name: 部署後健康檢查
         run: |
           python manage.py health \
             --url "${APP_BASE_URL%/}/api/health" \
-            --retries 20 \
+            --retries 40 \
             --retry-delay 15
 
       - name: 寫入部署摘要
