@@ -329,8 +329,13 @@ def page(
 
     body = join(
         [
+            # The back-to-top target. It must NOT be the header: that is
+            # sticky, so once you scroll it is already painted at the top of
+            # the viewport and scrolling to it moves nothing at all -- the
+            # button looked broken because it genuinely did nothing.
+            raw('<span id="top"></span>'),
             Markup('<a class="skip-link" href="#main">') + esc(t("nav.skip")) + raw("</a>"),
-            Markup('<header class="site-header" id="top">')
+            Markup('<header class="site-header">')
             + div(
                 a(t("app.name"), href="/", class_="brand"),
                 nav(ul(*links), class_="site-nav"),

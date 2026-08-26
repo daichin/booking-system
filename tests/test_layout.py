@@ -305,3 +305,37 @@ class BackToTopTests(LayoutTestBase):
     def test_it_is_translated(self):
         english = self.client.get("/day?lang=en").text
         self.assertIn('aria-label="Back to top"', english)
+
+
+class BackToTopTargetTests(LayoutTestBase):
+    """The regression: the button existed, was linked, and did nothing.
+
+    Its target was the header, which is ``position: sticky; top: 0``. Once you
+    scroll, that header is already painted at the top of the viewport, so the
+    browser has nothing to scroll and the click is a no-op. Every earlier test
+    passed because they only checked the link and the id existed.
+    """
+
+    def test_the_target_is_not_the_sticky_header(self):
+        html = self.client.get("/day").text
+        self.assertNotRegex(html, r'<header[^>]*id="top"')
+        self.assertNotRegex(html, r'id="top"[^>]*class="site-header"')
+
+    def test_the_target_sits_above_the_header_in_the_document(self):
+        html = self.client.get("/day").text
+        self.assertLess(
+            html.index('id="top"'),
+            html.index('class="site-header"'),
+            "the top anchor must come before the header to reach the real top",
+        )
+
+    def test_the_header_is_still_sticky(self):
+        # The fix must not have been "stop the header sticking".
+        self.assertRegex(STYLESHEET, r"\.site-header \{[^}]*position: sticky")
+
+    def test_the_target_is_present_on_every_page_that_shows_the_button(self):
+        for path in ("/day", "/week", "/my", "/login"):
+            with self.subTest(path=path):
+                html = self.client.get(path).text
+                if 'class="to-top"' in html:
+                    self.assertIn('id="top"', html)
