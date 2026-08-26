@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -78,11 +79,39 @@ def cmd_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _probe(url: str, timeout: float) -> tuple[int, str] | None:
-    """One health request. ``None`` means the host was unreachable.
+def _describe(error: object) -> str:
+    """Turn a connection failure into something a non-expert can act on.
 
-    An HTTP error response is still an answer -- it is returned so the caller
-    can report the status rather than retrying a service that is up but sick.
+    "could not reach" on its own is useless at the moment it matters: a name
+    that does not resolve and a port with nothing listening need completely
+    different fixes.
+    """
+    text = str(error)
+    lowered = text.lower()
+    if isinstance(error, socket.gaierror) or "not known" in lowered \
+            or "nodename nor servname" in lowered or "getaddrinfo" in lowered:
+        return (
+            f"網域名稱無法解析（{text}）。"
+            " APP_BASE_URL 的主機名稱可能打錯，或該 Render 服務尚未建立。"
+        )
+    if isinstance(error, ConnectionRefusedError) or "refused" in lowered:
+        return (
+            f"連線被拒絕（{text}）。"
+            " 主機存在，但沒有程式在監聽——應用程式很可能啟動失敗。"
+        )
+    if isinstance(error, TimeoutError) or "timed out" in lowered:
+        return f"連線逾時（{text}）。主機沒有在時限內回應。"
+    if "certificate" in lowered or "ssl" in lowered:
+        return f"TLS/憑證問題（{text}）。"
+    return text
+
+
+def _probe(url: str, timeout: float) -> tuple[int | None, str]:
+    """One health request.
+
+    Returns ``(status, body)`` for any HTTP answer -- including an error
+    status, which still means the service is up and talking. Returns
+    ``(None, reason)`` when the request never got that far.
     """
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
@@ -90,8 +119,10 @@ def _probe(url: str, timeout: float) -> tuple[int, str] | None:
             return response.status, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", errors="replace")
-    except (urllib.error.URLError, TimeoutError, OSError):
-        return None
+    except urllib.error.URLError as exc:
+        return None, _describe(exc.reason)
+    except (TimeoutError, OSError) as exc:
+        return None, _describe(exc)
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -105,21 +136,31 @@ def cmd_health(args: argparse.Namespace) -> int:
     """
     last_error = ""
     for attempt in range(1, args.retries + 1):
-        outcome = _probe(args.url, args.timeout)
-        if outcome is not None:
-            status, body = outcome
+        status, body = _probe(args.url, args.timeout)
+        if status is not None:
             break
-        last_error = f"could not reach {args.url}"
+        last_error = body
         if attempt < args.retries:
             print(
-                f"  attempt {attempt}/{args.retries} failed; retrying in"
-                f" {args.retry_delay:.0f}s (a free Render service can take"
-                f" ~60s to wake)",
+                f"  第 {attempt}/{args.retries} 次失敗：{body}",
+                file=sys.stderr,
+            )
+            print(
+                f"  {args.retry_delay:.0f} 秒後重試"
+                "（Render 免費方案喚醒約需 60 秒）",
                 file=sys.stderr,
             )
             time.sleep(args.retry_delay)
     else:
-        print(f"ERROR: {last_error}", file=sys.stderr)
+        print(f"\nERROR: 無法連上健康檢查端點。\n  原因：{last_error}", file=sys.stderr)
+        print(
+            "\n請依序檢查：\n"
+            "  1. Render 儀表板上這個服務的狀態是不是 Live，"
+            "若是紅色 Failed 請看它的 Logs 分頁\n"
+            "  2. Secret APP_BASE_URL 是否為完整網址、以 https:// 開頭、結尾沒有多餘字元\n"
+            "  3. 用瀏覽器直接開啟該網址，看是否真的打得開",
+            file=sys.stderr,
+        )
         return 1
 
     try:
