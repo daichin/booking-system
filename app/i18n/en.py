@@ -479,4 +479,7 @@ STRINGS: dict[str, str] = {
     'admin.settings.title_presets_title': 'Meeting subject shortcuts',
     'admin.settings.title_presets_help': 'Shown as buttons when booking, so a member can finish in one click. One per line, up to 20.',
     'admin.settings.title_presets_label': 'Subjects (one per line)',
+    'day.jump_to_room': 'Jump to room',
+    'week.jump_to_week': 'Jump to week',
+    'week.this_week': 'this week',
 }

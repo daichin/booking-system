@@ -483,4 +483,7 @@ STRINGS: dict[str, str] = {
     'admin.settings.title_presets_title': '會議主題快選',
     'admin.settings.title_presets_help': '預約時會以按鈕形式顯示，成員點一下即可完成預約。每行一個，最多 20 個。',
     'admin.settings.title_presets_label': '主題清單（每行一個）',
+    'day.jump_to_room': '跳至會議室',
+    'week.jump_to_week': '跳至指定週次',
+    'week.this_week': '本週',
 }

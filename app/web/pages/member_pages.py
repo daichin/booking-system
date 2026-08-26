@@ -263,13 +263,21 @@ def _render_slots(
         if booked is not None:
             classes.append("is-mine" if booked["user_id"] == viewer.id else "is-booked")
 
+        # Both cases use the same wrapper so every row is the same height and
+        # the columns stay in step; the full text lives in the title attribute
+        # because the visible text is clipped when it does not fit.
         if booked is not None:
+            owner_name = booked["owner"]["full_name"]
             detail: Any = div(
                 span(booked["title"], class_="slot-title"),
-                span(booked["owner"]["full_name"], class_="slot-owner"),
+                span(owner_name, class_="slot-owner"),
+                class_="slot-detail",
+                title=f"{booked['title']} ・ {owner_name}",
             )
         else:
-            detail = span(t("day.slot_free"), class_="slot-free")
+            detail = div(
+                span(t("day.slot_free"), class_="slot-free"), class_="slot-detail"
+            )
 
         action: Any = Markup("")
         if viewer.can_book:
@@ -339,17 +347,20 @@ def _room_column(
     settings: Settings,
     selection: tuple[str, int] | None,
     header: str | None = None,
+    anchor: str | None = None,
 ) -> Markup:
     """One column of the grid.
 
     The day view heads each column with the room name; the week view shows
-    one room across seven days, so it passes the date instead.
+    one room across seven days, so it passes the date instead. ``anchor`` is
+    the id the jump list scrolls to.
     """
     selected = selection is not None and selection[0] == room_day.room.id
     return div(
         h3(header or room_day.room.name),
         _render_slots(request, room_day, viewer, day, settings, selection),
         class_="room-column" + (" is-selecting" if selected else ""),
+        id=anchor,
     )
 
 
@@ -404,6 +415,32 @@ def _date_bar(day: date) -> Markup:
         a(t("day.next"), href=_day_url(day + timedelta(days=1)), class_="btn secondary"),
         class_="date-bar",
     )
+
+
+def _jump_list(summary_text: str, entries: list[tuple[str, str, bool]]) -> Markup:
+    """A dropdown that scrolls or navigates to one of ``entries``.
+
+    ``<details>`` rather than a ``<select>``: a select needs JavaScript to act
+    on a choice, and nothing else in this app does. Smooth scrolling comes
+    from CSS, and is disabled for readers who ask for reduced motion.
+
+    Each entry is ``(href, label, is_current)``.
+    """
+    return details(
+        summary(summary_text),
+        ul(
+            *[
+                li(a(label, href=href, aria_current="true" if current else None))
+                for href, label, current in entries
+            ],
+            class_="jump-list",
+        ),
+        class_="jump",
+    )
+
+
+def _room_anchor(room_id: str) -> str:
+    return f"room-{room_id}"
 
 
 def _parse_selection(request: Request) -> tuple[str, int] | None:
@@ -462,11 +499,34 @@ def day_view(request: Request) -> Response:
     if not room_days:
         parts.append(p(t("day.no_rooms"), class_="muted"))
     else:
+        # Worth the row only when there is somewhere to jump to.
+        if len(room_days) > 1:
+            parts.append(
+                _jump_list(
+                    t("day.jump_to_room"),
+                    [
+                        (
+                            f"#{_room_anchor(rd.room.id)}",
+                            rd.room.name,
+                            selection is not None and selection[0] == rd.room.id,
+                        )
+                        for rd in room_days
+                    ],
+                )
+            )
         columns = [
-            _room_column(request, room_day, user, day, settings, selection)
+            _room_column(
+                request,
+                room_day,
+                user,
+                day,
+                settings,
+                selection,
+                anchor=_room_anchor(room_day.room.id),
+            )
             for room_day in room_days
         ]
-        parts.append(div(*columns, class_="day-grid"))
+        parts.append(div(*columns, class_="day-grid cols-3"))
         if user.can_book:
             parts.append(
                 details(
@@ -477,6 +537,36 @@ def day_view(request: Request) -> Response:
             )
 
     return Response.html(page(request, t("nav.day"), *parts))
+
+
+def _week_jump(room_id: str, showing: date, settings: Settings) -> Markup:
+    """Jump straight to any week, instead of stepping one at a time.
+
+    The range covers the whole bookable horizon plus the week just gone, so
+    every week a member can actually book is one tap away. Labels are numeric
+    date ranges, which read the same in both languages.
+    """
+    today = local_date(now_utc())
+    first = today - timedelta(days=today.weekday() + 7)   # last Monday but one
+    last = today + timedelta(days=settings.booking_horizon_days)
+
+    entries: list[tuple[str, str, bool]] = []
+    monday = first
+    while monday <= last:
+        end = monday + timedelta(days=6)
+        label = f"{monday:%m/%d} – {end:%m/%d}"
+        if monday <= today <= end:
+            label = f"{label} ・ {t('week.this_week')}"
+        entries.append(
+            (
+                f"/week?{urlencode({'room_id': room_id, 'date': monday.isoformat()})}",
+                label,
+                monday <= showing <= end,
+            )
+        )
+        monday += timedelta(days=7)
+
+    return _jump_list(t("week.jump_to_week"), entries)
 
 
 def book_view(request: Request) -> Response:
@@ -654,6 +744,8 @@ def week_view(request: Request) -> Response:
     )
     parts.append(_legend())
 
+    parts.append(_week_jump(selected_room.id, start_day, settings))
+
     columns = []
     for offset in range(7):
         day = start_day + timedelta(days=offset)
@@ -671,7 +763,9 @@ def week_view(request: Request) -> Response:
                 header=format_date(combine_taipei(day, 0), request.locale),
             )
         )
-    parts.append(div(*columns, class_="day-grid"))
+    # Four across, so seven days fold into two rows rather than squeezing
+    # each day too narrow to read a booking title.
+    parts.append(div(*columns, class_="day-grid cols-4"))
 
     return Response.html(page(request, t("nav.week"), *parts))
 

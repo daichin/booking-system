@@ -44,7 +44,24 @@ a { color: var(--accent); }
 .site-nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; margin: 0; padding: 0; }
 .site-nav a { text-decoration: none; padding: 0.35rem 0.6rem; border-radius: 6px; display: block; }
 .site-nav a[aria-current="page"] { background: var(--mine); font-weight: 600; }
-.spacer { margin-left: auto; }
+.spacer { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+.account-name { color: var(--muted); font-size: 0.9rem; max-width: 8em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* On a phone the header had four groups and wrapped to four rows, eating the
+   screen before any content appeared. Below 640px the title and the member's
+   name are dropped and the nav scrolls sideways instead of wrapping, which
+   holds the whole header to two rows however many nav items there are. */
+@media (max-width: 640px) {
+  .site-header .bar { padding: 0.5rem 0.75rem; gap: 0.4rem 0.6rem; }
+  .brand { display: none; }
+  .account-name { display: none; }
+  .site-nav { flex: 1 1 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .site-nav ul { flex-wrap: nowrap; gap: 0.25rem; }
+  .site-nav a { white-space: nowrap; padding: 0.3rem 0.5rem; }
+  .spacer { margin-left: 0; }
+  .lang-switch { margin-left: auto; }
+}
 main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
 .panel {
   background: var(--panel); border: 1px solid var(--line);
@@ -88,21 +105,79 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 .tag-preempted { background: var(--warn-bg); color: var(--warn); }
 .tag-cancelled { background: var(--err-bg); color: var(--err); }
 
-/* Day grid: stacked on a phone, columns once there is width. */
-.day-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
-@media (min-width: 700px) {
-  .day-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+/* Jumping between rooms (or weeks) without scrolling the whole page. A
+   <details> behaves like a dropdown but is native HTML, so this needs no
+   JavaScript. */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+.jump { margin-bottom: 0.9rem; }
+.jump > summary {
+  cursor: pointer; display: inline-block; list-style: none;
+  padding: 0.5rem 0.9rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); font-weight: 600; font-size: 0.95rem;
 }
-.room-column { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.room-column h3 { margin: 0; padding: 0.6rem 0.75rem; background: #f2f4f7; font-size: 1rem; border-bottom: 1px solid var(--line); }
+.jump > summary::-webkit-details-marker { display: none; }
+.jump > summary::after { content: " ▾"; color: var(--muted); }
+.jump[open] > summary::after { content: " ▴"; }
+.jump-list {
+  list-style: none; margin: 0.4rem 0 0; padding: 0.4rem;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; max-height: 18rem; overflow-y: auto;
+  display: grid; gap: 0.15rem; grid-template-columns: 1fr;
+}
+@media (min-width: 600px) { .jump-list { grid-template-columns: 1fr 1fr; } }
+.jump-list a {
+  display: block; padding: 0.5rem 0.7rem; border-radius: 6px;
+  text-decoration: none; color: var(--ink);
+}
+.jump-list a:hover { background: var(--mine); }
+.jump-list a[aria-current="true"] { background: var(--mine); font-weight: 700; }
+
+/* Day grid: stacked on a phone, columns once there is width.
+   Column counts are capped rather than auto-fitted. auto-fit packed five
+   rooms onto a wide screen, leaving each one too narrow for a booking title
+   and a slot action to sit side by side. */
+.day-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+@media (min-width: 700px) { .day-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) {
+  .day-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .day-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+}
+.room-column {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+  /* Clear the sticky header when jumped to from the room list. */
+  scroll-margin-top: 6.5rem;
+}
+.room-column h3 {
+  margin: 0; padding: 0.6rem 0.75rem; background: #f2f4f7; font-size: 1rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .slot-list { list-style: none; margin: 0; padding: 0; }
-.slot { display: flex; gap: 0.5rem; padding: 0.4rem 0.75rem; border-bottom: 1px solid #eef1f4; align-items: baseline; }
-.slot-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; min-width: 5.5em; }
+
+/* Every row is exactly the same height. Columns are independent lists, so a
+   booking title that wrapped onto a second line used to push that column out
+   of step with the ones beside it and the times stopped lining up across the
+   grid. Overflowing text is clipped instead; the full text is in the row's
+   title attribute. */
+.slot {
+  display: flex; gap: 0.5rem; padding: 0 0.75rem; align-items: center;
+  border-bottom: 1px solid #eef1f4; height: 2.75rem;
+}
+.slot-time {
+  flex: none; font-variant-numeric: tabular-nums;
+  color: var(--muted); font-size: 0.85rem; min-width: 5.5em;
+}
+.slot-detail {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .slot-free { color: var(--muted); }
 .slot.is-booked { background: var(--other); }
 .slot.is-mine { background: var(--mine); }
 .slot-title { font-weight: 600; }
-.slot-owner { color: var(--muted); font-size: 0.85rem; }
+.slot-owner { color: var(--muted); font-size: 0.85rem; margin-inline-start: 0.4em; }
 .legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
 .legend span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 3px; margin-inline-end: 0.35em; vertical-align: middle; }
 .legend .k-mine::before { background: var(--mine); border: 1px solid #cbd9f2; }
@@ -215,7 +290,7 @@ def page(
 
     if user is not None:
         account = div(
-            span(f"{user.full_name}", class_="muted"),
+            span(f"{user.full_name}", class_="account-name"),
             form(
                 hidden(CSRF_FIELD, request.cookies.get(CSRF_COOKIE, "")),
                 Markup('<button class="secondary" type="submit">')
