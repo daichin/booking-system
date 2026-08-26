@@ -34,8 +34,8 @@ from app.settings import update as settings_update
 from app.timeutil import format_hhmm, local_date, now_utc, taipei_midnight, to_taipei
 from app.web import html
 from app.web.framework import (
-    CSRF_COOKIE,
     CSRF_FIELD,
+    csrf_token,
     Request,
     Response,
     Router,
@@ -94,7 +94,7 @@ def _guard(request: Request) -> models.User:
 
 
 def _csrf(request: Request) -> html.Markup:
-    return html.hidden(CSRF_FIELD, request.cookies.get(CSRF_COOKIE, ""))
+    return html.hidden(CSRF_FIELD, csrf_token(request))
 
 
 def _qs(params: dict[str, Any]) -> str:
@@ -641,8 +641,11 @@ def _invitations_table(request: Request) -> html.Markup:
     )
 
 
-def _invitations_form() -> html.Markup:
+def _invitations_form(request: Request) -> html.Markup:
     return html.form(
+        # Same omission as the create-room form had; both are now covered
+        # by tests/test_csrf_coverage.py.
+        _csrf(request),
         html.div(
             html.label(t("admin.invitations.emails_label"), for_="f-emails"),
             html.textarea(
@@ -673,7 +676,7 @@ def _invitations_list(request: Request) -> Response:
     return _shell(
         request,
         t("admin.invitations.title"),
-        html.div(_invitations_form(), class_="panel"),
+        html.div(_invitations_form(request), class_="panel"),
         html.div(
             html.h2(t("admin.invitations.outstanding_title")),
             _invitations_table(request),
@@ -731,7 +734,7 @@ def _invitations_send(request: Request) -> Response:
         request,
         t("admin.invitations.title"),
         html.div(result_body, class_="panel"),
-        html.div(_invitations_form(), class_="panel"),
+        html.div(_invitations_form(request), class_="panel"),
         html.div(
             html.h2(t("admin.invitations.outstanding_title")),
             _invitations_table(request),
@@ -872,8 +875,11 @@ def _room_row(request: Request, room: models.Room) -> html.Markup:
     )
 
 
-def _rooms_create_form() -> html.Markup:
+def _rooms_create_form(request: Request) -> html.Markup:
     return html.form(
+        # Every POST form needs this; without it the request is refused as
+        # cross-site. tests/test_csrf_coverage.py checks all of them.
+        _csrf(request),
         html.div(
             html.label(t("admin.rooms.field_name"), for_="new-name"),
             html.input_(type="text", name="name", id="new-name"),
@@ -937,7 +943,11 @@ def _rooms_list(request: Request) -> Response:
     return _shell(
         request,
         t("admin.rooms.title"),
-        html.div(html.h2(t("admin.rooms.create_title")), _rooms_create_form(), class_="panel"),
+        html.div(
+            html.h2(t("admin.rooms.create_title")),
+            _rooms_create_form(request),
+            class_="panel",
+        ),
         html.div(table, class_="panel"),
     )
 

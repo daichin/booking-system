@@ -20,8 +20,8 @@ from app.i18n import error_message, t
 from app.services import accounts, mailer, sessions
 from app.timeutil import now_utc
 from app.web.framework import (
-    CSRF_COOKIE,
     CSRF_FIELD,
+    csrf_token,
     SESSION_COOKIE,
     Request,
     Response,
@@ -35,7 +35,7 @@ from app.web.layout import page
 
 
 def _csrf_hidden(request: Request) -> Markup:
-    return hidden(CSRF_FIELD, request.cookies.get(CSRF_COOKIE, ""))
+    return hidden(CSRF_FIELD, csrf_token(request))
 
 
 def _safe_next(value: str | None) -> str | None:

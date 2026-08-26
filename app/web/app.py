@@ -64,6 +64,11 @@ def create_app(
     def on_request(request: Request, route: Any) -> Response | None:
         request.db = db
         request.config = config
+        # Decide the token before any handler renders a form. Deriving it from
+        # the cookie alone meant a first-time visitor's page carried an empty
+        # token while the response set a real cookie, so their first submit
+        # was always refused.
+        request.csrf_token = request.cookies.get(CSRF_COOKIE) or issue_csrf_token()
         request.user = _resolve_user(db, request)
 
         if request.user is not None and request.user.must_change_password:
@@ -80,7 +85,7 @@ def create_app(
         if not request.cookies.get(CSRF_COOKIE):
             response.set_cookie(
                 CSRF_COOKIE,
-                issue_csrf_token(),
+                request.csrf_token,   # the same value the page just rendered
                 http_only=False,
                 secure=request.is_secure,
                 max_age=60 * 60 * 12,

@@ -50,6 +50,10 @@ class Request:
         self.path = environ.get("PATH_INFO", "/") or "/"
         self.query = _flatten(parse_qs(environ.get("QUERY_STRING", "")))
         self.params: dict[str, str] = {}
+        # Set by the application before handlers run, so a form rendered
+        # on a visitor's very first response carries the same token the
+        # response is about to set as a cookie.
+        self.csrf_token = ""
         self.user = None          # set by the application after session lookup
         self.db = None
         self.config = None
@@ -241,6 +245,15 @@ def _flatten(values: dict[str, list[str]]) -> dict[str, str]:
     return {key: value[0] for key, value in values.items() if value}
 
 
+def csrf_token(request: Request) -> str:
+    """The token a form should submit back.
+
+    Prefers the one assigned for this request, falling back to the cookie
+    so the helper still works outside the application wiring.
+    """
+    return request.csrf_token or request.cookies.get(CSRF_COOKIE, "")
+
+
 def issue_csrf_token() -> str:
     return secrets.token_urlsafe(24)
 
@@ -343,7 +356,18 @@ class WSGIApp:
 
         if request.method not in SAFE_METHODS and not route.flags.get("csrf_exempt"):
             if not csrf_ok(request):
-                return self.render_error(request, ForbiddenError("CSRF_FAILED"), 403)
+                # Raise rather than return, so __call__ records the reason.
+                # Returning here meant a CSRF rejection logged a bare 403
+                # with no explanation of why.
+                raise ForbiddenError(
+                    "CSRF_FAILED",
+                    {
+                        "cookie_present": bool(request.cookies.get(CSRF_COOKIE)),
+                        "token_submitted": bool(
+                            request.form.get(CSRF_FIELD) or request.header(CSRF_HEADER)
+                        ),
+                    },
+                )
 
         return route.handler(request)
 

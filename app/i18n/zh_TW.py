@@ -105,6 +105,9 @@ STRINGS: dict[str, str] = {
     "error.CONFIRMATION_REQUIRED": "此操作需要再次確認。",
     "error.INTERNAL": "系統發生錯誤，請稍後再試。",
     "error.NOT_FOUND": "找不到頁面。",
+    "error.METHOD_NOT_ALLOWED": "這個網址不接受這種操作。",
+    "error.CSRF_FAILED": "表單已逾時或無效，請回上一頁重新整理後再送出一次。",
+    "error.CRON_FORBIDDEN": "缺少或不正確的排程密鑰。",
 
     # --- user status labels -------------------------------------------------
     "status.pending_email": "待驗證信箱",

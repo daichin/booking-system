@@ -46,8 +46,8 @@ from app.timeutil import (
     parse_utc,
 )
 from app.web.framework import (
-    CSRF_COOKIE,
     CSRF_FIELD,
+    csrf_token,
     Request,
     Response,
     Router,
@@ -94,7 +94,7 @@ _TAG_CLASS = {
 
 
 def _csrf_hidden(request: Request) -> Markup:
-    return hidden(CSRF_FIELD, request.cookies.get(CSRF_COOKIE, ""))
+    return hidden(CSRF_FIELD, csrf_token(request))
 
 
 def _parse_view_date(request: Request, param: str = "date") -> date:
