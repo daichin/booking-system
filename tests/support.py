@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import sqlite3
 import tempfile
 import uuid
 import unittest
@@ -18,7 +19,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from app import models, security
-from app.db import Connection, Database, create_database
+from app.db import POSTGRES, Connection, Database, create_database
 from app.db.migrations import migrate
 from app.settings import Settings, seed_defaults
 from app.timeutil import combine_taipei, local_date, now_utc
@@ -91,6 +92,38 @@ def make_db(path: str | None = None) -> Database:
     db = create_database(f"sqlite://{path}" if path else None)
     db.run_in_transaction(_bootstrap)
     return db
+
+
+def retryable_error(db: Database) -> Exception:
+    """An error the running backend will retry rather than surface.
+
+    A test that injects a failure to exercise the retry path has to speak the
+    backend's own language: SQLite retries on "database is locked", Postgres
+    on a serialisation failure. Hardcoding either one makes the test pass on
+    that backend and error out on the other -- which is exactly what happened
+    when the suite first ran against Postgres in CI.
+
+    The result is checked against the backend's own predicate, so this helper
+    cannot drift away from what ``run_in_transaction`` actually retries.
+    """
+    if db.dialect == POSTGRES:
+        import psycopg  # noqa: PLC0415 - only present on the Postgres path
+
+        failure = psycopg.errors.SerializationFailure
+        try:
+            error: Exception = failure(
+                "could not serialize access due to concurrent update"
+            )
+        except TypeError:  # pragma: no cover - depends on the psycopg version
+            error = failure()
+    else:
+        error = sqlite3.OperationalError("database is locked")
+
+    assert db._is_retryable(error), (
+        f"{type(error).__name__} is not retryable on the {db.dialect} backend; "
+        "retryable_error() and Database._is_retryable have drifted apart"
+    )
+    return error
 
 
 def taipei_at(days_ahead: int, hour: int, minute: int = 0) -> datetime:

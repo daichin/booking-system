@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import random
-import sqlite3
 import sys
 import threading
 import types
@@ -34,7 +33,7 @@ from app.models import CONFIRMED, PREEMPTED, new_id
 from app.services import mailer
 from app.services.preemption import attempt_booking
 from app.timeutil import now_utc
-from tests.support import AppTestCase, taipei_at
+from tests.support import AppTestCase, retryable_error, taipei_at
 
 
 class ReviewBase(AppTestCase):
@@ -741,9 +740,14 @@ class RetryAndCommitOrderTests(ReviewBase):
     def test_a_retried_transaction_applies_its_effects_exactly_once(self):
         """``run_in_transaction`` retries ``work``; nothing may double-apply.
 
-        The first attempt is failed with a retryable "database is locked"
-        error *after* the winning booking row has already been inserted, which
-        is the worst possible moment for a non-idempotent callable.
+        The first attempt is failed with a retryable error *after* the winning
+        booking row has already been inserted, which is the worst possible
+        moment for a non-idempotent callable.
+
+        The injected error has to be one the *running* backend retries, not a
+        SQLite one: Postgres retries serialisation failures and would have let
+        a sqlite3 error escape, failing this test in CI for a reason that has
+        nothing to do with what it is checking.
         """
         junior = self.create_user(level=2)
         requester = self.create_user(level=9)
@@ -751,11 +755,12 @@ class RetryAndCommitOrderTests(ReviewBase):
 
         original = Connection.execute
         state = {"fired": False}
+        injected = retryable_error(self.db)
 
         def flaky(conn_self, sql, params=None):
             if not state["fired"] and "INSERT INTO preemption_log" in sql:
                 state["fired"] = True
-                raise sqlite3.OperationalError("database is locked")
+                raise injected
             return original(conn_self, sql, params)
 
         Connection.execute = flaky
