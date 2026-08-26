@@ -314,18 +314,38 @@ def _render_slots(
                 detail,
                 action,
                 class_=" ".join(classes),
+                id=_slot_anchor(room_day.room.id, minute),
             )
         )
         minute = slot_end
     return ul(*items, class_="slot-list")
 
 
-def _day_url(day: date, room_id: str | None = None, start_minute: int | None = None) -> str:
+def _slot_anchor(room_id: str, minute: int) -> str:
+    return f"slot-{room_id}-{minute}"
+
+
+def _day_url(
+    day: date,
+    room_id: str | None = None,
+    start_minute: int | None = None,
+    *,
+    anchor: str | None = None,
+) -> str:
+    """A link back to the day grid, landing where the member was looking.
+
+    Picking a start reloads the page, and without a fragment the browser
+    starts at the top -- so choosing an 18:00 slot threw you back to 08:00 and
+    you had to scroll down again to pick the end. The fragment puts you back
+    on the exact row you clicked.
+    """
     query = {"date": day.isoformat()}
     if room_id and start_minute is not None:
         query["room"] = room_id
         query["start"] = format_hhmm(start_minute)
-    return f"/day?{urlencode(query)}"
+        anchor = anchor or _slot_anchor(room_id, start_minute)
+    fragment = f"#{anchor}" if anchor else ""
+    return f"/day?{urlencode(query)}{fragment}"
 
 
 def _book_url(room_id: str, day: date, start_minute: int, end_minute: int) -> str:
@@ -455,7 +475,9 @@ def _parse_selection(request: Request) -> tuple[str, int] | None:
         return None
 
 
-def _selection_banner(day: date, room_name: str, start_minute: int) -> Markup:
+def _selection_banner(
+    day: date, room_id: str, room_name: str, start_minute: int
+) -> Markup:
     return div(
         span(
             t(
@@ -465,7 +487,13 @@ def _selection_banner(day: date, room_name: str, start_minute: int) -> Markup:
             ),
             class_="selection-text",
         ),
-        a(t("day.cancel_selection"), href=_day_url(day), class_="btn secondary"),
+        # Cancelling keeps your place too, or you are thrown back to the top
+        # of the page for choosing wrongly.
+        a(
+            t("day.cancel_selection"),
+            href=_day_url(day, anchor=_slot_anchor(room_id, start_minute)),
+            class_="btn secondary",
+        ),
         class_="selection-banner",
         role="status",
     )
@@ -489,7 +517,9 @@ def day_view(request: Request) -> Response:
         if chosen is None:
             selection = None
         else:
-            parts.append(_selection_banner(day, chosen.room.name, selection[1]))
+            parts.append(
+                _selection_banner(day, chosen.room.id, chosen.room.name, selection[1])
+            )
 
     if not selection and user.can_book:
         parts.append(p(t("day.hint_pick_start"), class_="muted"))

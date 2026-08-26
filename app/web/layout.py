@@ -164,6 +164,10 @@ html { scroll-behavior: smooth; }
 .slot {
   display: flex; gap: 0.5rem; padding: 0 0.75rem; align-items: center;
   border-bottom: 1px solid #eef1f4; height: 2.75rem;
+  /* Picking a start reloads the page and lands on this row. Clear both the
+     sticky header and the sticky selection banner that appears above it,
+     otherwise the row you just chose sits underneath them. */
+  scroll-margin-top: 8.5rem;
 }
 .slot-time {
   flex: none; font-variant-numeric: tabular-nums;
@@ -231,6 +235,24 @@ html { scroll-behavior: smooth; }
 @media (min-width: 640px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 1rem; top: 0.5rem; background: #fff; padding: 0.5rem; z-index: 20; }
+
+/* Back to top. A plain anchor, so it works with no JavaScript and the
+   scrolling is animated by the same scroll-behavior rule as the jump lists
+   (and is likewise disabled for reduced-motion readers). Always visible:
+   fading it in after a scroll threshold is the one variant that would need
+   JavaScript. */
+.to-top {
+  position: fixed; inset-inline-end: 1rem; bottom: 1rem; z-index: 15;
+  width: 3rem; height: 3rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel); color: var(--accent);
+  border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(28, 36, 48, 0.18);
+  text-decoration: none; font-size: 1.3rem; line-height: 1; opacity: 0.92;
+}
+.to-top:hover { opacity: 1; background: var(--mine); border-color: var(--accent); }
+/* Keep it clear of the last column's slot actions on a narrow screen. */
+@media (max-width: 640px) { main { padding-bottom: 4.5rem; } }
+@media print { .to-top { display: none; } }
 """
 
 
@@ -308,7 +330,7 @@ def page(
     body = join(
         [
             Markup('<a class="skip-link" href="#main">') + esc(t("nav.skip")) + raw("</a>"),
-            Markup('<header class="site-header">')
+            Markup('<header class="site-header" id="top">')
             + div(
                 a(t("app.name"), href="/", class_="brand"),
                 nav(ul(*links), class_="site-nav"),
@@ -326,6 +348,13 @@ def page(
             footer(
                 p(t("app.timezone_note"), class_="muted"),
                 class_="site-footer",
+            ),
+            a(
+                "↑",
+                href="#top",
+                class_="to-top",
+                aria_label=t("nav.back_to_top"),
+                title=t("nav.back_to_top"),
             ),
         ]
     )

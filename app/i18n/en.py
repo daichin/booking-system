@@ -482,4 +482,5 @@ STRINGS: dict[str, str] = {
     'day.jump_to_room': 'Jump to room',
     'week.jump_to_week': 'Jump to week',
     'week.this_week': 'this week',
+    'nav.back_to_top': 'Back to top',
 }

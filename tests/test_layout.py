@@ -211,3 +211,97 @@ class ScrollBehaviourTests(AppTestCase):
     def test_anchors_clear_the_sticky_header(self):
         # Without this the room heading lands underneath the header.
         self.assertRegex(STYLESHEET, r"\.room-column \{[^}]*scroll-margin-top")
+
+
+class KeepYourPlaceTests(LayoutTestBase):
+    """Picking a start must not throw you back to the top of the page.
+
+    Choosing an 18:00 slot used to reload the grid at 08:00, so the second
+    click meant scrolling all the way down again to find the row you had just
+    chosen.
+    """
+
+    def start_links(self, html: str) -> list[str]:
+        return [h.replace("&amp;", "&") for h in re.findall(r'href="(/day\?[^"]*start=[^"]*)"', html)]
+
+    def test_a_start_link_carries_a_fragment_for_the_slot_it_is_on(self):
+        html = self.client.get("/day").text
+        links = self.start_links(html)
+        self.assertTrue(links, "no start links on the page")
+        for link in links:
+            with self.subTest(link=link):
+                self.assertIn("#slot-", link)
+
+    def test_the_fragment_matches_a_real_row_on_the_page_it_loads(self):
+        html = self.client.get("/day").text
+        link = self.start_links(html)[6]          # not the first row
+        anchor = link.split("#", 1)[1]
+
+        landed = self.client.get(link)
+        self.assertEqual(landed.status, 200)
+        self.assertIn(f'id="{anchor}"', landed.text)
+
+    def test_the_fragment_points_at_the_slot_that_was_clicked(self):
+        html = self.client.get("/day").text
+        link = self.start_links(html)[4]
+        anchor = link.split("#", 1)[1]
+
+        landed = self.client.get(link)
+        # The row that fragment names must be the one now marked as the start.
+        row = re.search(
+            r'<li class="slot is-start"[^>]*id="([^"]+)"', landed.text
+        )
+        self.assertIsNotNone(row, "no start row on the selecting page")
+        self.assertEqual(row.group(1), anchor)
+
+    def test_cancelling_a_selection_also_keeps_your_place(self):
+        html = self.client.get("/day").text
+        picked = self.client.get(self.start_links(html)[4])
+
+        # Scope to the banner: the date bar also has /day links, and those
+        # deliberately move to another day rather than keeping your place.
+        banner = re.search(
+            r'<div class="selection-banner"[^>]*>(.*?)</div>', picked.text, re.S
+        )
+        self.assertIsNotNone(banner, "no selection banner on the selecting page")
+        cancel = re.findall(r'href="([^"]*)"', banner.group(1))
+
+        self.assertTrue(cancel, "the banner offers no way to cancel")
+        self.assertIn("#slot-", cancel[0].replace("&amp;", "&"))
+
+    def test_rows_leave_room_for_the_sticky_bars_above_them(self):
+        # Without this the row landed on sits underneath the header and the
+        # selection banner.
+        self.assertRegex(STYLESHEET, r"\.slot \{[^}]*scroll-margin-top")
+
+
+class BackToTopTests(LayoutTestBase):
+    def test_every_page_offers_a_way_back_to_the_top(self):
+        for path in ("/day", "/week", "/my"):
+            with self.subTest(path=path):
+                html = self.client.get(path).text
+                self.assertIn('class="to-top"', html)
+                self.assertIn('href="#top"', html)
+
+    def test_the_target_exists(self):
+        html = self.client.get("/day").text
+        self.assertIn('id="top"', html)
+
+    def test_it_is_a_plain_link_so_it_needs_no_javascript(self):
+        html = self.client.get("/day").text
+        self.assertNotIn("<script", html)
+        self.assertRegex(html, r'<a[^>]*href="#top"[^>]*class="to-top"')
+
+    def test_it_is_labelled_for_screen_readers(self):
+        html = self.client.get("/day").text
+        self.assertRegex(html, r'class="to-top"[^>]*aria-label="[^"]+"')
+
+    def test_it_floats_clear_of_the_content(self):
+        self.assertRegex(STYLESHEET, r"\.to-top \{[^}]*position: fixed")
+        # On a phone it would otherwise sit on top of the last column's
+        # booking buttons.
+        self.assertRegex(STYLESHEET, r"main \{ padding-bottom")
+
+    def test_it_is_translated(self):
+        english = self.client.get("/day?lang=en").text
+        self.assertIn('aria-label="Back to top"', english)

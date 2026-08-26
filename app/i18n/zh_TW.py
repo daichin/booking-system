@@ -486,4 +486,5 @@ STRINGS: dict[str, str] = {
     'day.jump_to_room': '跳至會議室',
     'week.jump_to_week': '跳至指定週次',
     'week.this_week': '本週',
+    'nav.back_to_top': '回到頁頂',
 }

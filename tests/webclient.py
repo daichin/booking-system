@@ -62,6 +62,11 @@ class Client:
         headers: dict | None = None,
         csrf: bool = True,
     ) -> Response:
+        # A browser never sends the fragment to the server, and links in this
+        # app carry one so the page lands where the member was looking. Drop
+        # it here or it ends up glued to the last query parameter.
+        path, _, _fragment = path.partition("#")
+
         query = ""
         if "?" in path:
             path, _, query = path.partition("?")
