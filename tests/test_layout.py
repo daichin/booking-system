@@ -52,10 +52,13 @@ class RoomJumpTests(LayoutTestBase):
             with self.subTest(room=room.name):
                 self.assertIn(room.name, html)
 
-    def test_it_is_a_details_element_so_it_needs_no_javascript(self):
+    def test_the_server_renders_a_working_list_without_any_script(self):
+        """The script upgrades this into a <select>; the markup it upgrades
+        has to be usable on its own, because that is the fallback."""
         html = self.client.get("/day").text
         self.assertIn('<details class="jump">', html)
-        self.assertNotIn("<script", html)
+        # Real links, not placeholders a script is expected to fill in.
+        self.assertRegex(html, r'<ul class="jump-list">.*?<a href="#room-')
 
     def test_no_jump_list_when_there_is_only_one_room(self):
         for room in self.rooms[1:]:
@@ -201,12 +204,24 @@ class MobileHeaderTests(LayoutTestBase):
 
 
 class ScrollBehaviourTests(AppTestCase):
-    def test_jumping_is_animated_but_respects_reduced_motion(self):
-        self.assertIn("scroll-behavior: smooth", STYLESHEET)
-        self.assertRegex(
-            STYLESHEET,
-            r"prefers-reduced-motion: reduce\) \{ html \{ scroll-behavior: auto",
-        )
+    def test_the_root_does_not_set_smooth_scrolling(self):
+        """It broke fragment jumps to the top of the document.
+
+        With `scroll-behavior: smooth` on the root, clicking a link to an
+        anchor at position 0 scrolled nowhere at all, which is what made the
+        back-to-top button look dead. Animation now lives in the script,
+        where it can be applied per-scroll.
+        """
+        self.assertNotRegex(STYLESHEET, r"html \{[^}]*scroll-behavior")
+
+    def test_the_script_animates_and_respects_reduced_motion(self):
+        from app.web.enhance import SCRIPT
+
+        self.assertIn("prefers-reduced-motion: reduce", SCRIPT)
+        self.assertIn("behavior()", SCRIPT)
+        # Both scrolling paths go through the same preference check.
+        self.assertIn("window.scrollTo({ top: 0, behavior: behavior() })", SCRIPT)
+        self.assertIn("behavior: behavior(), block: 'start'", SCRIPT)
 
     def test_anchors_clear_the_sticky_header(self):
         # Without this the room heading lands underneath the header.
@@ -287,10 +302,12 @@ class BackToTopTests(LayoutTestBase):
         html = self.client.get("/day").text
         self.assertIn('id="top"', html)
 
-    def test_it_is_a_plain_link_so_it_needs_no_javascript(self):
+    def test_it_is_a_plain_link_that_works_without_the_script(self):
         html = self.client.get("/day").text
-        self.assertNotIn("<script", html)
         self.assertRegex(html, r'<a[^>]*href="#top"[^>]*class="to-top"')
+        # Visible as rendered. Hiding it until you scroll is the script's
+        # job, so starting hidden would strand anyone without JavaScript.
+        self.assertNotRegex(html, r'class="to-top[^"]*is-hidden')
 
     def test_it_is_labelled_for_screen_readers(self):
         html = self.client.get("/day").text

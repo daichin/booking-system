@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.i18n import t
+from app.web.enhance import SCRIPT
 from app.web.framework import CSRF_COOKIE, CSRF_FIELD, Request
 from app.web.html import Markup, a, div, esc, footer, form, h1, hidden, join, li
 from app.web.html import main as main_el
@@ -108,8 +109,12 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 /* Jumping between rooms (or weeks) without scrolling the whole page. A
    <details> behaves like a dropdown but is native HTML, so this needs no
    JavaScript. */
-html { scroll-behavior: smooth; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+/* No `scroll-behavior: smooth` here. With it set on the root, a fragment
+   navigation to an element at the very top of the document silently does
+   nothing -- which is what made the back-to-top button appear dead even
+   after its target was moved off the sticky header. Fragment jumps are
+   therefore instant, which always works, and the script animates the two
+   places where animation is worth having. */
 .jump { margin-bottom: 0.9rem; }
 .jump > summary {
   cursor: pointer; display: inline-block; list-style: none;
@@ -253,6 +258,15 @@ html { scroll-behavior: smooth; }
 /* Keep it clear of the last column's slot actions on a narrow screen. */
 @media (max-width: 640px) { main { padding-bottom: 4.5rem; } }
 @media print { .to-top { display: none; } }
+/* Only applied once the script runs, so with no JavaScript the button simply
+   stays visible rather than disappearing for good. */
+.to-top.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.to-top { transition: opacity 0.18s ease, visibility 0.18s ease; }
+@media (prefers-reduced-motion: reduce) { .to-top { transition: none; } }
+.jump-select {
+  width: auto; min-width: 12rem; max-width: 100%;
+  margin-bottom: 0.9rem; font-weight: 600;
+}
 """
 
 
@@ -373,6 +387,9 @@ def page(
         f"<style>{STYLESHEET}</style>\n"
         "</head>\n<body>\n"
         f"{body}\n"
+        # Enhancements only. Every interaction it touches already works
+        # without it, so a blocked or broken script costs nothing.
+        f"<script>{SCRIPT}</script>\n"
         "</body>\n</html>"
     )
 

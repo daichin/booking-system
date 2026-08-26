@@ -29,6 +29,7 @@ from app.errors import (
     NOT_AUTHENTICATED,
 )
 from app.i18n import DEFAULT_LOCALE, error_message, t
+from app.web.enhance import SCRIPT_CSP_HASH
 
 #: Name of the session cookie (CONTRACT.md §5).
 SESSION_COOKIE = "session"
@@ -288,7 +289,13 @@ SECURITY_HEADERS = (
     ("Referrer-Policy", "same-origin"),
     (
         "Content-Security-Policy",
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; "
+        # The enhancement script is authorised by the hash of its exact
+        # bytes, not by 'unsafe-inline'. Without this the policy blocked our
+        # own script and the page silently lost every enhancement, while the
+        # HTML still contained the tag and every assertion about it passed.
+        f"script-src 'self' '{SCRIPT_CSP_HASH}'; "
+        "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; "
         "base-uri 'none'",
     ),

@@ -70,3 +70,28 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
         run: python -m unittest discover -s tests -t . --verbose
+
+  browser:
+    name: 測試（真實瀏覽器）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+
+      # 只有這個 job 需要 Playwright；正式部署完全用不到它。
+      - name: 安裝 Playwright 與 Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+
+      # 這些測試檢查的是「CSS 和捲動實際做了什麼」，
+      # 例如回頂端按鈕按下去有沒有真的回到頂端、
+      # 各欄時段是否真的對齊、手機版 header 是不是真的只有兩列。
+      - name: 執行瀏覽器測試
+        run: python -m unittest tests.test_browser --verbose

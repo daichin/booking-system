@@ -1,0 +1,13 @@
+# Development and test dependencies. NEVER installed in production -- the
+# deployed app still needs only the two packages in requirements.txt, and the
+# whole suite except tests/test_browser.py runs on the standard library alone.
+#
+# Playwright drives a real Chromium. It is the only thing that can check what
+# CSS and scrolling actually do: a back-to-top button shipped broken while
+# three tests asserting its markup all passed, and the enhancement script was
+# silently blocked by our own Content-Security-Policy while the HTML still
+# contained the tag.
+#
+# After installing, fetch the browser itself:
+#     python -m playwright install chromium
+playwright==1.62.0

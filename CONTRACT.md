@@ -313,13 +313,26 @@ service container, so the production backend is exercised before any deploy.
 
 ---
 
-## 8. Known environment limitation
+## 8. Environment notes
 
-The machine this was built on has **no outbound network**: no package installs,
-no Postgres, no provider accounts, and therefore no real deploy. Consequences:
+**Correction.** Earlier revisions of this document stated that the build
+machine had "no outbound network" and that packages could not be installed.
+That was wrong. An early `curl` to the npm registry hung, and that single
+result was over-generalised into a standing limitation which then shaped
+several decisions and was repeated in commit messages. Re-tested since: the
+npm registry and PyPI both respond normally, and packages install fine.
 
-* The Postgres backend and the Brevo transport are written but not executed
-  locally. CI covers the Postgres path; the Brevo path is covered by a
-  contract test against a stub HTTP layer.
-* Spec §12 Group E (deployment) cannot be verified here. It is written and
-  documented, and must be run once by the owner from the GitHub Actions tab.
+What is actually true:
+
+* **No local Postgres server.** Docker Desktop is not running on this
+  machine, so the Postgres code path is exercised by the CI job in
+  `.github/workflows/ci.yml`, which runs the whole suite against a Postgres
+  service container. `psycopg` itself installs without trouble.
+* **No provider accounts.** Neon, Brevo and Render accounts belong to the
+  owner, so the Brevo transport is covered by a contract test against a stub
+  HTTP layer rather than a real send.
+* **Spec §12 Group E (deployment) still needs the owner.** It is written and
+  documented, and must be run once from the GitHub Actions tab.
+
+Development dependencies live in `requirements-dev.txt` and are never
+installed in production; `requirements.txt` remains the two runtime packages.
