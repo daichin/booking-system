@@ -197,6 +197,19 @@ ol.steps>li::before{
 ul.plain{margin:0 0 1.05rem;padding-inline-start:1.2rem;max-width:64ch}
 ul.plain li{margin-bottom:.35rem}
 
+.cmd{
+  font-family:var(--mono);font-size:.85rem;line-height:1.7;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:8px;
+  padding:.75rem .9rem;margin:.5rem 0 1.1rem;overflow-x:auto;
+  white-space:pre;color:var(--ink);max-width:100%;
+}
+.tabmap{display:grid;gap:.5rem;margin:1.2rem 0;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.tabmap div{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.85rem 1rem;
+}
+.tabmap b{display:block;font-family:var(--mono);font-size:.82rem;color:var(--accent-ink);margin-bottom:.25rem}
+.tabmap span{font-size:.9rem;color:var(--ink-soft)}
+
 /* ---------- callouts ---------- */
 .note{
   border:1px solid var(--line);border-inline-start:4px solid var(--accent);
@@ -279,6 +292,7 @@ footer{
     <ol id="tocList">
       <li><a href="#overview"><span class="n">－</span><span>開始之前</span></a></li>
       <li><a href="#map"><span class="n">－</span><span>整體流程圖</span></a></li>
+      <li><a href="#github"><span class="n">0</span><span>建立 GitHub 儲存庫</span></a></li>
       <li><a href="#neon"><span class="n">1</span><span>建立資料庫</span></a></li>
       <li><a href="#brevo"><span class="n">2</span><span>設定寄信服務</span></a></li>
       <li><a href="#render"><span class="n">3</span><span>建立網站主機</span></a></li>
@@ -286,6 +300,7 @@ footer{
       <li><a href="#deploy"><span class="n">5</span><span>按下部署按鈕</span></a></li>
       <li><a href="#first-login"><span class="n">6</span><span>第一次登入</span></a></li>
       <li><a href="#reminders"><span class="n">7</span><span>開啟自動提醒信</span></a></li>
+      <li><a href="#ongoing"><span class="n">－</span><span>日後的操作</span></a></li>
       <li><a href="#faq"><span class="n">？</span><span>常見問題</span></a></li>
     </ol>
   </nav>
@@ -381,6 +396,110 @@ footer{
         </svg>
         <figcaption><b>每個服務各給你一段憑證，全部集中貼進 GitHub Secrets。</b>虛線是最容易漏掉的一步：其中八項除了 GitHub 之外，還要再貼一份到 Render 的環境變數，因為實際跑網站的是 Render。</figcaption>
       </figure>
+    </section>
+
+    <section id="github">
+      <h2 class="step"><span class="num">0</span>建立 GitHub 儲存庫</h2>
+      <p class="lede">程式要先放上 GitHub，後面的「按鈕部署」才有東西可以部署。<b>這是全程唯一需要打指令的一步</b>，之後所有操作都在網頁上完成。</p>
+
+      <div class="note warn">
+        <p class="note-title">⚠ 請選 Public（公開），這關係到費用</p>
+        <p>提醒信排程每 15 分鐘執行一次，一個月約 2,880 次。GitHub 的計費方式是<b>每次執行不到一分鐘也算一分鐘</b>：</p>
+        <p><b>Public 公開</b>：Actions 執行時間<b>無限、免費</b> ✅<br>
+        <b>Private 私有</b>：免費帳號每月只有 2,000 分鐘 → <b>會超額，就不再是 NT$0</b> ❌</p>
+        <p>你的密碼與金鑰<b>不會外洩</b>——它們存放在 GitHub Secrets 裡是加密的，公開儲存庫的訪客看不到，執行紀錄中也會自動遮蔽成 <code>***</code>。公開的只有程式碼本身。</p>
+      </div>
+
+      <h3>先認識這三個分頁</h3>
+      <p>之後所有操作都圍繞著儲存庫上方的三個分頁，先記住哪件事在哪裡：</p>
+
+      <figure>
+        <svg viewBox="0 0 880 300" role="img" aria-label="GitHub 儲存庫的三個分頁各自負責的工作：Code 退版、Actions 部署與排程、Settings 貼密碼">
+          <defs>
+            <marker id="g-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- tab bar -->
+          <line x1="14" y1="62" x2="866" y2="62" stroke="currentColor" stroke-width="1.5" opacity=".4"/>
+          <g font-family="Noto Sans TC, sans-serif" font-size="13.5">
+            <rect x="34" y="26" width="94" height="36" rx="6" fill="none" stroke="#0F6079" stroke-width="2"/>
+            <text x="81" y="50" text-anchor="middle" fill="#0F6079" font-weight="700">Code</text>
+
+            <text x="180" y="50" text-anchor="middle" fill="currentColor" opacity=".45">Issues</text>
+            <text x="272" y="50" text-anchor="middle" fill="currentColor" opacity=".45">Pull requests</text>
+
+            <rect x="382" y="26" width="104" height="36" rx="6" fill="none" stroke="#0F6079" stroke-width="2"/>
+            <text x="434" y="50" text-anchor="middle" fill="#0F6079" font-weight="700">Actions</text>
+
+            <text x="560" y="50" text-anchor="middle" fill="currentColor" opacity=".45">Projects</text>
+
+            <rect x="700" y="26" width="110" height="36" rx="6" fill="none" stroke="#0F6079" stroke-width="2"/>
+            <text x="755" y="50" text-anchor="middle" fill="#0F6079" font-weight="700">Settings</text>
+          </g>
+
+          <g stroke="#0F6079" stroke-width="1.6" fill="none" marker-end="url(#g-ah)">
+            <path d="M81,62 V106"/>
+            <path d="M434,62 V106"/>
+            <path d="M755,62 V106"/>
+          </g>
+
+          <!-- panels -->
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="14" y="112" width="252" height="116" rx="9"/>
+            <rect x="314" y="112" width="252" height="116" rx="9"/>
+            <rect x="614" y="112" width="252" height="116" rx="9"/>
+          </g>
+          <g font-family="Noto Sans TC, sans-serif" fill="currentColor">
+            <text x="140" y="140" text-anchor="middle" font-size="12.5" font-weight="700">看程式・退回舊版本</text>
+            <text x="140" y="166" text-anchor="middle" font-size="11.5">Commits → 找到那一次</text>
+            <text x="140" y="188" text-anchor="middle" font-size="11.5">→ ⋯ → Revert</text>
+            <text x="140" y="214" text-anchor="middle" font-size="11" opacity=".7">出問題時才會用到</text>
+
+            <text x="440" y="140" text-anchor="middle" font-size="12.5" font-weight="700">部署・提醒信排程</text>
+            <text x="440" y="166" text-anchor="middle" font-size="11.5">Deploy → Run workflow</text>
+            <text x="440" y="188" text-anchor="middle" font-size="11.5">Reminders → 每 15 分鐘</text>
+            <text x="440" y="214" text-anchor="middle" font-size="11" opacity=".7">最常來的地方</text>
+
+            <text x="740" y="140" text-anchor="middle" font-size="12.5" font-weight="700">貼上九個密碼</text>
+            <text x="740" y="166" text-anchor="middle" font-size="11.5">Secrets and variables</text>
+            <text x="740" y="188" text-anchor="middle" font-size="11.5">→ Actions</text>
+            <text x="740" y="214" text-anchor="middle" font-size="11" opacity=".7">只有設定時會用到</text>
+          </g>
+
+          <text x="440" y="266" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor" opacity=".8">手機上若看不到 Settings，把上方選單列往左滑，或點最右邊的 ⋯</text>
+        </svg>
+        <figcaption><b>設定只做一次，之後你幾乎只會用到 Actions 分頁。</b>Settings 是放密碼的地方，Code 只有在要退回舊版本時才需要。</figcaption>
+      </figure>
+
+      <h3>建立空的儲存庫</h3>
+      <ol class="steps">
+        <li>登入 <a href="https://github.com">github.com</a>。</li>
+        <li>點右上角的 <kbd>+</kbd>（加號，在頭像左邊）→ <kbd>New repository</kbd>。</li>
+        <li><b>Repository name</b> 輸入 <code>booking-system</code>。</li>
+        <li><b>Description</b> 留空即可。</li>
+        <li>選 <kbd>Public</kbd>（原因見上方警告）。</li>
+        <li><b>下面三個選項全部不要勾</b>：Add a README file、Add .gitignore、Choose a license。</li>
+        <li>點綠色的 <kbd>Create repository</kbd>。</li>
+        <li>下一頁會出現一段指令，<b>先不要照它做</b>，只記下最上面那串網址：<code>https://github.com/你的帳號/booking-system.git</code></li>
+      </ol>
+
+      <div class="note warn">
+        <p class="note-title">⚠ 第 6 步是最常見的卡關點</p>
+        <p>只要勾了其中任何一個，GitHub 會先幫你建立一個檔案，接下來上傳程式時就會因為「兩邊內容對不起來」而被拒絕。真的勾到了也不難處理，把儲存庫刪掉重建一個就好。</p>
+      </div>
+
+      <h3>把程式上傳上去</h3>
+      <p>在你電腦上的專案資料夾執行以下兩行（把網址換成你剛剛記下的那一串）。在 Claude Code 裡可以直接在輸入框用 <code>!</code> 開頭執行：</p>
+      <div class="cmd">git remote add origin https://github.com/你的帳號/booking-system.git
+git push -u origin main</div>
+      <p>第一次推送時，Windows 會跳出瀏覽器要你登入 GitHub 授權，照著點完即可。完成後回到 GitHub 重新整理，就會看到 <code>app</code>、<code>tests</code>、<code>docs</code>、<code>SETUP.md</code> 等檔案。</p>
+
+      <div class="note good">
+        <p class="note-title">✓ 這一步只需要做一次</p>
+        <p>程式上傳之後，日後的部署、改設定、退版全部都在網頁上點按完成，不需要再打任何指令。</p>
+      </div>
     </section>
 
     <section id="neon">
@@ -550,13 +669,54 @@ footer{
         <figcaption><b>六個步驟依序執行，任何一步失敗就整個停下來。</b>檢查設定排在最前面，是為了在還沒碰到資料庫之前就先攔下最常見的錯誤——少貼一項 Secret。</figcaption>
       </figure>
 
+      <h3>先啟用 Actions</h3>
       <ol class="steps">
         <li>在儲存庫點上方 <kbd>Actions</kbd>。</li>
+        <li>若出現藍色提示「Workflows aren't being run on this repository」，
+            點 <kbd>I understand my workflows, go ahead and enable them</kbd>。</li>
+        <li>左側應該會列出三項：<b>CI</b>、<b>Deploy</b>、<b>Reminders</b>。</li>
+      </ol>
+
+      <h3>執行部署</h3>
+      <ol class="steps">
         <li>左側清單點 <b>Deploy</b>。</li>
-        <li>右側按 <kbd>Run workflow</kbd>，再按一次綠色的 <kbd>Run workflow</kbd> 確認。</li>
+        <li>右側灰色提示條的右邊有 <kbd>Run workflow</kbd> 按鈕，點它。</li>
+        <li>跳出的小面板中，<b>Use workflow from</b> 保持 <code>Branch: main</code>，再點綠色的 <kbd>Run workflow</kbd>。</li>
+        <li>幾秒後重新整理頁面，會看到一列黃色圓點代表執行中；點進去可看即時進度。</li>
         <li>等待 3 到 8 分鐘。</li>
         <li>看到綠色勾勾後往下捲，「部署結果」裡就有你的網站網址。</li>
       </ol>
+
+      <h3>如果是紅色叉叉</h3>
+      <p>點進該次執行，左側找到紅色的步驟點開，往下捲到紅色文字，對照下表：</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>畫面上的訊息</th><th>怎麼處理</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>ERROR: missing required secret(s):</code> 後面列出名稱</td>
+              <td>回到步驟 4 把那幾項補上，注意大小寫要一模一樣</td>
+            </tr>
+            <tr>
+              <td>缺少 Secret：<code>RENDER_DEPLOY_HOOK_URL</code></td>
+              <td>回 Render → Settings → Deploy Hook 複製網址後補上</td>
+            </tr>
+            <tr>
+              <td>「執行測試」步驟失敗</td>
+              <td>是程式本身的問題，把訊息保留下來尋求協助</td>
+            </tr>
+            <tr>
+              <td>「部署後健康檢查」失敗</td>
+              <td>先直接開網站看看能不能開。常常只是主機還在喚醒，等一分鐘後重跑一次部署即可</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note good">
+        <p class="note-title">✓ 重複部署是安全的</p>
+        <p>修正後再按一次 <kbd>Run workflow</kbd> 即可。系統<b>不會</b>重複建立管理員帳號或範例會議室，也不會弄亂既有資料。</p>
+      </div>
     </section>
 
     <section id="first-login">
@@ -628,6 +788,38 @@ footer{
         <p class="note-title">⚠ 定期看一眼管理後台首頁</p>
         <p>上面會寫「提醒信工作最後執行時間」。如果那個時間停在很久以前，回到 <b>Actions → Reminders</b>，看到 <kbd>Enable workflow</kbd> 就按下去，再按一次 <kbd>Run workflow</kbd> 立即補跑一次。</p>
       </div>
+    </section>
+
+    <section id="ongoing">
+      <h2 class="step">日後的操作</h2>
+      <p class="lede">系統上線之後，大部分事情<b>不需要碰 GitHub</b>。先看看哪些事該去哪裡做。</p>
+
+      <div class="tabmap">
+        <div><b>管理後台</b><span>改預約規則、新增會議室、邀請成員、審核註冊、調整等級——全部在網站上完成，改完立即生效。</span></div>
+        <div><b>GitHub → Actions</b><span>重新部署、手動補跑一次提醒信、確認排程還活著。</span></div>
+        <div><b>GitHub → Code</b><span>只有要退回舊版本時才會用到。</span></div>
+      </div>
+
+      <h3>重新部署（例如程式有更新）</h3>
+      <ol class="steps">
+        <li><kbd>Actions</kbd> → 左側 <b>Deploy</b> → <kbd>Run workflow</kbd> → <kbd>Run workflow</kbd>。</li>
+      </ol>
+
+      <h3>退回上一個版本</h3>
+      <ol class="steps">
+        <li>點 <kbd>Code</kbd> 分頁 → 點檔案清單上方的 <b>Commits</b>。</li>
+        <li>找到<b>造成問題的那一次</b>變更，點進去。</li>
+        <li>右上角 <kbd>⋯</kbd> → <kbd>Revert</kbd>。</li>
+        <li>點 <kbd>Create pull request</kbd>，再點 <kbd>Merge pull request</kbd>。</li>
+        <li>回到 <kbd>Actions</kbd> → <b>Deploy</b> → <kbd>Run workflow</kbd> 重新部署。</li>
+      </ol>
+      <p>退版只會還原<b>程式</b>，既有的預約、成員、會議室資料都會保留。</p>
+
+      <h3>定期確認提醒信還在跑</h3>
+      <p>登入系統 → <b>管理後台首頁</b> → 看「提醒信最後執行時間」。若停在很久以前，回到 <kbd>Actions</kbd> → <b>Reminders</b>，看到 <kbd>Enable workflow</kbd> 就按下去，再按一次 <kbd>Run workflow</kbd> 立即補跑。</p>
+
+      <h3>緊急止血：讓系統暫停寄信</h3>
+      <p>如果系統開始寄出不該寄的信，<b>不需要重新部署</b>：登入管理後台 → <b>系統設定</b> → 把 <code>reminders_enabled</code> 關閉並儲存，提醒信立刻停止。</p>
     </section>
 
     <section id="faq">
