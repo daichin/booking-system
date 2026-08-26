@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 
 from app import models
 from app.errors import (
@@ -36,9 +37,9 @@ from app.services import bookings, mailer, preemption, rooms
 from app.settings import Settings
 from app.timeutil import (
     combine_taipei,
-    format_date_zh,
+    format_date,
+    format_range,
     format_hhmm,
-    format_range_zh,
     local_date,
     minutes_since_midnight,
     now_utc,
@@ -57,12 +58,14 @@ from app.web.html import (
     Markup,
     a,
     button,
+    details,
     div,
     field,
     form,
     h2,
     h3,
     hidden,
+    input_,
     label,
     li,
     notice,
@@ -70,6 +73,7 @@ from app.web.html import (
     p,
     select,
     span,
+    summary,
     table,
     tbody,
     td,
@@ -79,6 +83,13 @@ from app.web.html import (
     ul,
 )
 from app.web.layout import page
+
+
+def format_range_current(start, end):
+    """A booking window in the language of the request being handled."""
+    from app.i18n import current_locale
+
+    return format_range(start, end, current_locale())
 
 _PENDING_STATUSES = (models.PENDING_EMAIL, models.PENDING_APPROVAL)
 
@@ -120,6 +131,37 @@ def _select_field(name: str, caption: str, options: list) -> Markup:
         select(*options, name=name, id=f"f-{name}", required=True),
         class_="field",
     )
+
+
+def _read_title(data: dict) -> str:
+    """The meeting title, from whichever control the member used.
+
+    Each preset is its own submit button carrying ``name="title"``, so one
+    click both chooses the title and submits the booking. The free-text box
+    is named separately and wins when it has been filled in.
+    """
+    custom = str(data.get("custom_title", "")).strip()
+    if custom:
+        return custom
+    return str(data.get("title", "")).strip()
+
+
+def _recent_titles(db: Any, user_id: str, limit: int = 4) -> list[str]:
+    """Titles this member has used before, most recent first.
+
+    Cheaper than it looks and worth a lot: most people book the same few
+    meetings over and over.
+    """
+
+    def work(conn: Any) -> list[str]:
+        rows = conn.query_all(
+            "SELECT title, MAX(start_at) AS latest FROM bookings"
+            " WHERE user_id = ? GROUP BY title ORDER BY latest DESC LIMIT ?",
+            (user_id, limit),
+        )
+        return [row["title"] for row in rows if row["title"]]
+
+    return db.run_in_transaction(work)
 
 
 def _parse_times(data: dict) -> tuple[datetime, datetime]:
@@ -169,47 +211,146 @@ def _legend() -> Markup:
     )
 
 
-def _render_slots(room_day: Any, viewer_id: str, slot_minutes: int) -> Markup:
-    items = []
+def _format_duration(minutes: int) -> str:
+    """"90" -> "1.5 小時". Shown on every end-time option so nobody has to
+    work out how long 09:30 to 11:00 is."""
+    if minutes < 60:
+        return t("day.duration_minutes", minutes=minutes)
+    hours = minutes / 60
+    return t("day.duration_hours", hours=f"{hours:g}")
+
+
+def _booking_at(room_day: Any, minute: int) -> dict | None:
+    """The confirmed booking covering this slot, if any."""
+    for entry in room_day.bookings:
+        start = minutes_since_midnight(entry["start_at"])
+        end = minutes_since_midnight(entry["end_at"]) or 24 * 60
+        if start <= minute < end:
+            return entry
+    return None
+
+
+def _render_slots(
+    request: Request,
+    room_day: Any,
+    viewer: models.User,
+    day: date,
+    settings: Settings,
+    selection: tuple[str, int] | None,
+) -> Markup:
+    """One room's slots, as links that build a booking two clicks at a time.
+
+    Click one: pick a start. Click two: pick where it ends. Between those the
+    page is in a visibly different state, which is what tells the two clicks
+    apart without any JavaScript.
+
+    Occupied slots stay clickable: the preemption engine decides whether the
+    member may take them, and says so on the confirmation page. The grid does
+    not try to know the rules.
+    """
+    slot = settings.slot_minutes
+    selecting_here = selection is not None and selection[0] == room_day.room.id
+    start_minute = selection[1] if selecting_here else None
+
+    items: list[Markup] = []
     minute = room_day.open_minutes
     while minute < room_day.close_minutes:
-        slot_end = minute + slot_minutes
-        booked = None
-        for entry in room_day.bookings:
-            b_start = minutes_since_midnight(entry["start_at"])
-            b_end = minutes_since_midnight(entry["end_at"]) or 24 * 60
-            if b_start <= minute < b_end:
-                booked = entry
-                break
-
+        slot_end = minute + slot
+        booked = _booking_at(room_day, minute)
         time_label = f"{format_hhmm(minute)}–{format_hhmm(slot_end)}"
-        if booked is None:
-            items.append(
-                li(
-                    span(time_label, class_="slot-time"),
-                    span(t("day.slot_free"), class_="slot-free"),
-                    class_="slot",
-                )
+
+        classes = ["slot"]
+        if booked is not None:
+            classes.append("is-mine" if booked["user_id"] == viewer.id else "is-booked")
+
+        if booked is not None:
+            detail: Any = div(
+                span(booked["title"], class_="slot-title"),
+                span(booked["owner"]["full_name"], class_="slot-owner"),
             )
         else:
-            is_mine = booked["user_id"] == viewer_id
-            css = "slot is-booked" + (" is-mine" if is_mine else "")
-            items.append(
-                li(
-                    span(time_label, class_="slot-time"),
-                    div(
-                        span(booked["title"], class_="slot-title"),
-                        span(booked["owner"]["full_name"], class_="slot-owner"),
-                    ),
-                    class_=css,
+            detail = span(t("day.slot_free"), class_="slot-free")
+
+        action: Any = Markup("")
+        if viewer.can_book:
+            if not selecting_here:
+                action = a(
+                    t("day.pick_start"),
+                    href=_day_url(day, room_day.room.id, minute),
+                    class_="slot-action",
                 )
+            elif minute == start_minute:
+                classes.append("is-start")
+                action = a(
+                    t("day.only_this", duration=_format_duration(slot)),
+                    href=_book_url(room_day.room.id, day, start_minute, slot_end),
+                    class_="slot-action",
+                )
+            elif minute > start_minute:
+                span_minutes = slot_end - start_minute
+                if span_minutes <= settings.max_booking_minutes:
+                    classes.append("is-in-range")
+                    action = a(
+                        t("day.end_here", duration=_format_duration(span_minutes)),
+                        href=_book_url(room_day.room.id, day, start_minute, slot_end),
+                        class_="slot-action",
+                    )
+                else:
+                    classes.append("is-unreachable")
+            else:
+                classes.append("is-unreachable")
+
+        items.append(
+            li(
+                span(time_label, class_="slot-time"),
+                detail,
+                action,
+                class_=" ".join(classes),
             )
+        )
         minute = slot_end
     return ul(*items, class_="slot-list")
 
 
-def _room_column(header: str, room_day: Any, viewer_id: str, slot_minutes: int) -> Markup:
-    return div(h3(header), _render_slots(room_day, viewer_id, slot_minutes), class_="room-column")
+def _day_url(day: date, room_id: str | None = None, start_minute: int | None = None) -> str:
+    query = {"date": day.isoformat()}
+    if room_id and start_minute is not None:
+        query["room"] = room_id
+        query["start"] = format_hhmm(start_minute)
+    return f"/day?{urlencode(query)}"
+
+
+def _book_url(room_id: str, day: date, start_minute: int, end_minute: int) -> str:
+    return "/book?" + urlencode(
+        {
+            "room_id": room_id,
+            "date": day.isoformat(),
+            "start_time": format_hhmm(start_minute),
+            "end_time": format_hhmm(end_minute),
+        }
+    )
+
+
+def _room_column(
+    request: Request,
+    room_day: Any,
+    viewer: models.User,
+    day: date,
+    settings: Settings,
+    selection: tuple[str, int] | None,
+    header: str | None = None,
+) -> Markup:
+    """One column of the grid.
+
+    The day view heads each column with the room name; the week view shows
+    one room across seven days, so it passes the date instead.
+    """
+    selected = selection is not None and selection[0] == room_day.room.id
+    return div(
+        h3(header or room_day.room.name),
+        _render_slots(request, room_day, viewer, day, settings, selection),
+        class_="room-column" + (" is-selecting" if selected else ""),
+    )
 
 
 def _pending_notice(user: models.User) -> Markup:
@@ -244,35 +385,238 @@ def _booking_panel(request: Request, room_days: list, day: date, settings: Setti
     )
 
 
+def _date_bar(day: date) -> Markup:
+    """Previous / today / jump-to-date / next.
+
+    The jump uses a native ``<input type="date">``, which opens the phone's
+    own calendar and needs no JavaScript.
+    """
+    return div(
+        a(t("day.prev"), href=_day_url(day - timedelta(days=1)), class_="btn secondary"),
+        a(t("day.today"), href=_day_url(local_date(now_utc())), class_="btn secondary"),
+        form(
+            input_(type="date", name="date", value=day.isoformat(), aria_label=t("day.goto")),
+            button(t("day.go"), type="submit", class_="secondary"),
+            method="get",
+            action="/day",
+            class_="date-jump",
+        ),
+        a(t("day.next"), href=_day_url(day + timedelta(days=1)), class_="btn secondary"),
+        class_="date-bar",
+    )
+
+
+def _parse_selection(request: Request) -> tuple[str, int] | None:
+    """``?room=&start=HH:MM`` -- the half-finished pick carried in the URL."""
+    room_id = request.query.get("room")
+    raw_start = request.query.get("start")
+    if not room_id or not raw_start:
+        return None
+    try:
+        return room_id, parse_hhmm(raw_start)
+    except ValueError:
+        return None
+
+
+def _selection_banner(day: date, room_name: str, start_minute: int) -> Markup:
+    return div(
+        span(
+            t(
+                "day.selected",
+                room=room_name,
+                time=format_hhmm(start_minute),
+            ),
+            class_="selection-text",
+        ),
+        a(t("day.cancel_selection"), href=_day_url(day), class_="btn secondary"),
+        class_="selection-banner",
+        role="status",
+    )
+
+
 def day_view(request: Request) -> Response:
     user = require_login(request)
     day = _parse_view_date(request)
     settings = request.db.run_in_transaction(Settings.load)
     room_days = rooms.availability(request.db, day=day)
+    selection = _parse_selection(request) if user.can_book else None
 
     parts: list[Any] = [_pending_notice(user)]
-    parts.append(
-        div(
-            a(t("day.prev"), href=f"/day?date={day - timedelta(days=1)}"),
-            span(format_date_zh(combine_taipei(day, 0))),
-            a(t("day.next"), href=f"/day?date={day + timedelta(days=1)}"),
-            class_="actions",
+    parts.append(_date_bar(day))
+    parts.append(p(format_date(combine_taipei(day, 0), request.locale), class_="day-heading"))
+
+    if selection is not None:
+        chosen = next(
+            (rd for rd in room_days if rd.room.id == selection[0]), None
         )
-    )
+        if chosen is None:
+            selection = None
+        else:
+            parts.append(_selection_banner(day, chosen.room.name, selection[1]))
+
+    if not selection and user.can_book:
+        parts.append(p(t("day.hint_pick_start"), class_="muted"))
+
     parts.append(_legend())
 
     if not room_days:
         parts.append(p(t("day.no_rooms"), class_="muted"))
     else:
         columns = [
-            _room_column(room_day.room.name, room_day, user.id, settings.slot_minutes)
+            _room_column(request, room_day, user, day, settings, selection)
             for room_day in room_days
         ]
         parts.append(div(*columns, class_="day-grid"))
         if user.can_book:
-            parts.append(_booking_panel(request, room_days, day, settings))
+            parts.append(
+                details(
+                    summary(t("day.manual_entry")),
+                    _booking_panel(request, room_days, day, settings),
+                    class_="manual-entry",
+                )
+            )
 
     return Response.html(page(request, t("nav.day"), *parts))
+
+
+def book_view(request: Request) -> Response:
+    """Confirm a time picked on the day grid, and name the meeting.
+
+    Room, date and both times arrive in the URL from the two clicks the
+    member already made, so all that is left is the title -- and each preset
+    is a submit button, so choosing one finishes the booking in a single
+    click.
+    """
+    user = require_login(request)
+    _require_can_book(user)
+
+    room_id = request.query.get("room_id", "")
+    day = _parse_view_date(request)
+    start_at, end_at = _parse_times(request.query)
+    settings = request.db.run_in_transaction(Settings.load)
+
+    room = request.db.run_in_transaction(lambda conn: rooms.get_room(conn, room_id))
+
+    # Probe with a placeholder title: the real one is chosen below and
+    # validated on submit. This only asks "is this slot obtainable?".
+    probe = preemption.attempt_booking(
+        request.db,
+        requester_id=user.id,
+        room_id=room_id,
+        start_at=start_at,
+        end_at=end_at,
+        title=t("book.placeholder_title"),
+        dry_run=True,
+    )
+
+    duration = _format_duration(int((end_at - start_at).total_seconds() // 60))
+    summary_line = div(
+        p(
+            span(room.name, class_="slot-title"),
+            span(" ・ ", class_="muted"),
+            span(format_range(start_at, end_at, request.locale)),
+            span(f" ({duration})", class_="muted"),
+        ),
+        p(a(t("book.change_time"), href=_day_url(day, room_id, minutes_since_midnight(start_at)))),
+        class_="panel",
+    )
+
+    parts: list[Any] = [summary_line]
+
+    if probe.outcome == BLOCKED:
+        parts.append(notice(error_message(probe.reason or "", **(probe.blocker or {})), kind="error"))
+        parts.append(p(a(t("book.back_to_day"), href=_day_url(day), class_="btn")))
+        return Response.html(page(request, t("book.title"), *parts))
+
+    confirm_override = probe.outcome == PREEMPTION_REQUIRED
+    if confirm_override:
+        parts.append(
+            div(
+                h2(t("book.will_override_title")),
+                p(t("book.will_override", count=len(probe.victims))),
+                ul(
+                    *[
+                        li(
+                            f"{v.room_name} ・ "
+                            f"{format_range(v.booking.start_at, v.booking.end_at, request.locale)}"
+                            f" ・ {v.owner_view['full_name']}"
+                            f"（{v.owner_view['department']}）"
+                        )
+                        for v in probe.victims
+                    ],
+                    class_="victim-list",
+                ),
+                class_="confirm-panel",
+            )
+        )
+
+    presets = settings.title_presets
+    recent = [title for title in _recent_titles(request.db, user.id) if title not in presets]
+
+    hidden_fields = [
+        _csrf_hidden(request),
+        hidden("room_id", room_id),
+        hidden("date", day.isoformat()),
+        hidden("start_time", format_hhmm(minutes_since_midnight(start_at))),
+        hidden("end_time", format_hhmm(minutes_since_midnight(end_at))),
+    ]
+    if confirm_override:
+        hidden_fields.append(hidden("confirm_preemption", "1"))
+
+    submit_label = (
+        t("book.submit_override") if confirm_override else t("book.submit")
+    )
+
+    chip_rows: list[Any] = []
+    if presets:
+        chip_rows.append(p(t("book.pick_subject"), class_="muted"))
+        chip_rows.append(
+            div(
+                *[
+                    button(name, type="submit", name_="title", value=name, class_="chip")
+                    for name in presets
+                ],
+                class_="chips",
+            )
+        )
+    if recent:
+        chip_rows.append(p(t("book.recent"), class_="muted"))
+        chip_rows.append(
+            div(
+                *[
+                    button(name, type="submit", name_="title", value=name, class_="chip secondary")
+                    for name in recent
+                ],
+                class_="chips",
+            )
+        )
+
+    parts.append(
+        div(
+            h2(t("book.subject")),
+            form(
+                *hidden_fields,
+                *chip_rows,
+                div(
+                    label(t("book.custom"), for_="f-custom-title"),
+                    input_(
+                        type="text",
+                        name="custom_title",
+                        id="f-custom-title",
+                        maxlength="120",
+                        placeholder=t("book.custom_placeholder"),
+                    ),
+                    class_="field",
+                ),
+                div(button(submit_label, type="submit"), class_="actions"),
+                method="post",
+                action="/bookings",
+            ),
+            class_="panel",
+        )
+    )
+
+    return Response.html(page(request, t("book.title"), *parts))
 
 
 def week_view(request: Request) -> Response:
@@ -314,8 +658,18 @@ def week_view(request: Request) -> Response:
     for offset in range(7):
         day = start_day + timedelta(days=offset)
         [room_day] = rooms.availability(request.db, day=day, room_ids=[selected_room.id])
+        # Picking a slot here jumps to that day's grid with the start already
+        # chosen, so the week view is a way in to the same two-click flow.
         columns.append(
-            _room_column(format_date_zh(combine_taipei(day, 0)), room_day, user.id, settings.slot_minutes)
+            _room_column(
+                request,
+                room_day,
+                user,
+                day,
+                settings,
+                None,
+                header=format_date(combine_taipei(day, 0), request.locale),
+            )
         )
     parts.append(div(*columns, class_="day-grid"))
 
@@ -339,7 +693,7 @@ def _upcoming_table(request: Request, rows: list[dict]) -> Markup:
             tr(
                 td(row["room_name"]),
                 td(row["title"]),
-                td(format_range_zh(row["start_at"], row["end_at"])),
+                td(format_range_current(row["start_at"], row["end_at"])),
                 td(cancel_form),
             )
         )
@@ -361,7 +715,7 @@ def _past_table(rows: list[dict]) -> Markup:
             tr(
                 td(row["room_name"]),
                 td(row["title"]),
-                td(format_range_zh(row["start_at"], row["end_at"])),
+                td(format_range_current(row["start_at"], row["end_at"])),
                 td(tag),
             )
         )
@@ -401,7 +755,7 @@ def _confirmation_page(
 ) -> Markup:
     items = [
         li(
-            f"{victim.room_name}｜{format_range_zh(victim.booking.start_at, victim.booking.end_at)}"
+            f"{victim.room_name}｜{format_range_current(victim.booking.start_at, victim.booking.end_at)}"
             f"｜{victim.owner_view['full_name']}（{victim.owner_view['department']}）"
         )
         for victim in victims
@@ -434,7 +788,7 @@ def _blocked_page(attempt: Any) -> Markup:
     if blocker.get("room_name"):
         detail = blocker["room_name"]
         if blocker.get("start_at") and blocker.get("end_at"):
-            detail += "｜" + format_range_zh(parse_utc(blocker["start_at"]), parse_utc(blocker["end_at"]))
+            detail += "｜" + format_range_current(parse_utc(blocker["start_at"]), parse_utc(blocker["end_at"]))
         parts.append(p(detail, class_="muted"))
     owner = blocker.get("owner")
     if owner:
@@ -449,9 +803,9 @@ def bookings_form(request: Request) -> Response:
 
     form_data = request.form
     room_id = form_data.get("room_id", "")
-    title = form_data.get("title", "")
+    title = _read_title(form_data)
     start_at, end_at = _parse_times(form_data)
-    confirm = form_data.get("confirm_preemption") == "true"
+    confirm = form_data.get("confirm_preemption") in ("true", "1")
 
     if confirm:
         attempt = preemption.attempt_booking(
@@ -583,6 +937,7 @@ def api_availability(request: Request) -> Response:
 
 def register(router: Router) -> None:
     router.add("GET", "/day", day_view)
+    router.add("GET", "/book", book_view)
     router.add("GET", "/week", week_view)
     router.add("GET", "/my", my_bookings)
     router.add("POST", "/bookings", bookings_form)

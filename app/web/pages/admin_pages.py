@@ -1318,6 +1318,29 @@ def _setting_field(settings: Settings, key: str) -> html.Markup:
     )
 
 
+def _title_preset_field(settings: Settings) -> html.Markup:
+    """The one-click meeting subjects offered on the booking form.
+
+    Edited as one title per line, which is the least fiddly way to maintain a
+    short list on a phone.
+    """
+    return html.div(
+        html.h2(t("admin.settings.title_presets_title")),
+        html.p(t("admin.settings.title_presets_help"), class_="muted"),
+        html.div(
+            html.label(t("admin.settings.title_presets_label"), for_="title-presets"),
+            html.textarea(
+                "\n".join(settings.title_presets),
+                name="title_presets",
+                id="title-presets",
+                rows="7",
+            ),
+            class_="field",
+        ),
+        class_="panel",
+    )
+
+
 def _quota_fields(settings: Settings) -> html.Markup:
     quotas = settings.values.get("quota_by_level") or {}
     fields = []
@@ -1351,6 +1374,7 @@ def _settings_show(request: Request, *, error_notice: html.Markup | None = None)
         _csrf(request),
         html.div(html.h2(t("admin.settings.title")), *fields, class_="panel"),
         _quota_fields(settings),
+        _title_preset_field(settings),
         html.button(t("admin.settings.save"), type="submit"),
         method="post",
         action="/admin/settings",
@@ -1381,6 +1405,7 @@ def _settings_save(request: Request) -> Response:
         str(level): form.get(f"quota_{level}", "0")
         for level in range(models.MIN_LEVEL, models.MAX_LEVEL + 1)
     }
+    changes["title_presets"] = form.get("title_presets", "")
 
     def work(conn):
         before = Settings.load(conn)

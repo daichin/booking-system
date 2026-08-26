@@ -171,3 +171,55 @@ def format_range_zh(start: datetime, end: datetime) -> str:
         f"{format_date_zh(start)} {format_time_zh(start)}–"
         f"{format_date_zh(end)} {format_time_zh(end)} (台北時間)"
     )
+
+
+# --- locale-aware rendering --------------------------------------------------
+#
+# Fixed tables rather than the `locale` module, whose behaviour depends on
+# what the host has installed -- not something to leave to a container image.
+
+_WEEKDAY_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTH_EN = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+#: The timezone label every rendered time carries (spec §9.2).
+_TZ_LABEL = {"zh-TW": "台北時間", "en": "Taipei time"}
+
+
+def format_date(value: datetime, locale: str = "zh-TW") -> str:
+    """A date in the reader's language, always in Taipei time."""
+    if locale == "en":
+        local = to_taipei(value)
+        return (
+            f"{_WEEKDAY_EN[local.weekday()]} {local.day} "
+            f"{_MONTH_EN[local.month - 1]} {local.year}"
+        )
+    return format_date_zh(value)
+
+
+def format_time(value: datetime, locale: str = "zh-TW") -> str:
+    """24-hour wall clock; the same in both languages."""
+    return format_time_zh(value)
+
+
+def format_range(start: datetime, end: datetime, locale: str = "zh-TW") -> str:
+    """Render a booking window in the reader's language.
+
+    zh-TW: ``2026-09-03 (四) 14:00–15:00 (台北時間)``
+    en:    ``Thu 3 Sep 2026, 14:00–15:00 (Taipei time)``
+    """
+    if locale != "en":
+        return format_range_zh(start, end)
+
+    label = _TZ_LABEL["en"]
+    if to_taipei(start).date() == to_taipei(end).date():
+        return (
+            f"{format_date(start, 'en')}, "
+            f"{format_time_zh(start)}–{format_time_zh(end)} ({label})"
+        )
+    return (
+        f"{format_date(start, 'en')} {format_time_zh(start)} – "
+        f"{format_date(end, 'en')} {format_time_zh(end)} ({label})"
+    )

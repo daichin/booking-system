@@ -58,6 +58,9 @@ class User:
     status: str
     is_admin: bool
     must_change_password: bool
+    #: Interface language. Stored per member because the reminder job
+    #: sends mail with no browser to ask.
+    locale: str
     email_verified_at: datetime | None
     approved_at: datetime | None
     approved_by: str | None
@@ -99,6 +102,7 @@ class User:
             status=row["status"],
             is_admin=bool(row["is_admin"]),
             must_change_password=bool(row["must_change_password"]),
+            locale=row.get("locale") or "zh-TW",
             email_verified_at=row["email_verified_at"],
             approved_at=row["approved_at"],
             approved_by=row["approved_by"],

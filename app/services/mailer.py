@@ -39,7 +39,9 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
-from app import models
+from contextlib import contextmanager
+
+from app import i18n, models
 from app.db.base import Connection, Database
 from app.services import email_templates
 from app.services.transports import Message, Transport, build_transport
@@ -196,13 +198,44 @@ def _record_cron_run(db: Database, started_at: Any, *, ok: bool, detail: str) ->
     db.run_in_transaction(work)
 
 
+def _locale_for(db: Database, to_email: str) -> str:
+    """The recipient's chosen interface language.
+
+    Mail is rendered in the language of whoever receives it, not of whoever
+    triggered it -- and the reminder job runs from cron with no request to
+    inherit a locale from, which is exactly why the preference is stored on
+    the member rather than in a cookie.
+    """
+
+    def work(conn: Connection) -> str | None:
+        row = conn.query_one("SELECT locale FROM users WHERE email = ?", (to_email,))
+        return row["locale"] if row else None
+
+    try:
+        return i18n.normalise(db.run_in_transaction(work))
+    except Exception:  # noqa: BLE001 - a missing row must not stop the mail
+        return i18n.DEFAULT_LOCALE
+
+
+@contextmanager
+def _rendering_for(locale: str):
+    """Render this message in ``locale``, then put the locale back."""
+    previous = i18n.current_locale()
+    i18n.set_locale(locale)
+    try:
+        yield
+    finally:
+        i18n.set_locale(previous)
+
+
 def _attempt_send(
     db: Database, row: dict[str, Any], event: EmailEvent, transport: Transport
 ) -> bool | None:
     """Try to deliver one queued row. Returns ``True`` (sent), ``False``
     (exhausted retries, now ``failed``), or ``None`` (transient failure,
     still ``queued`` for a later call)."""
-    rendered = email_templates.render(row["type"], event.context)
+    with _rendering_for(_locale_for(db, row["to_email"])):
+        rendered = email_templates.render(row["type"], event.context)
     message = Message(
         to_email=row["to_email"],
         to_name=event.context.get("full_name"),
@@ -308,7 +341,8 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
         results: list[str | None] = []
         for event in events:
             row_id = models.new_id()
-            subject = email_templates.render(event.kind, event.context).subject
+            with _rendering_for(_locale_for(db, event.to_email)):
+                subject = email_templates.render(event.kind, event.context).subject
             # Each insert gets its own savepoint. On Postgres a failed
             # statement poisons the whole transaction, so simply catching the
             # unique violation and carrying on would make the *next* insert

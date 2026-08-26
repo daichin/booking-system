@@ -108,6 +108,44 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 .legend .k-mine::before { background: var(--mine); border: 1px solid #cbd9f2; }
 .legend .k-other::before { background: var(--other); border: 1px solid var(--line); }
 .legend .k-free::before { background: #fff; border: 1px solid var(--line); }
+/* Two-click slot picking. The "selecting" state must look different enough
+   that it is obvious the second click means something else. */
+.date-bar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.5rem; }
+.date-bar .btn { padding: 0.45rem 0.8rem; font-size: 0.9rem; }
+.date-jump { display: flex; gap: 0.35rem; align-items: center; }
+.date-jump input { width: auto; min-width: 9.5rem; padding: 0.4rem 0.5rem; }
+.date-jump button { padding: 0.45rem 0.8rem; font-size: 0.9rem; }
+.day-heading { font-weight: 700; font-size: 1.05rem; margin: 0.25rem 0 0.75rem; }
+.selection-banner {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+  justify-content: space-between; background: var(--mine);
+  border: 2px solid var(--accent); border-radius: var(--radius);
+  padding: 0.75rem 1rem; margin-bottom: 0.9rem; position: sticky; top: 3.6rem; z-index: 5;
+}
+.selection-text { font-weight: 600; }
+.room-column.is-selecting { outline: 2px solid var(--accent); }
+.slot-action {
+  margin-inline-start: auto; white-space: nowrap; text-decoration: none;
+  font-size: 0.85rem; font-weight: 600; padding: 0.2rem 0.55rem;
+  border: 1px solid var(--line); border-radius: 999px; background: #fff;
+}
+.slot-action:hover { background: var(--mine); border-color: var(--accent); }
+.slot.is-start { background: var(--accent); }
+.slot.is-start .slot-time, .slot.is-start .slot-free, .slot.is-start .slot-owner { color: #e8f0fe; }
+.slot.is-start .slot-title { color: #fff; }
+.slot.is-in-range { background: var(--mine); }
+.slot.is-unreachable { opacity: 0.45; }
+.manual-entry { margin-top: 1rem; }
+.manual-entry > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+
+/* One-click meeting subjects. Each chip is its own submit button. */
+.chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
+.chip {
+  padding: 0.5rem 0.9rem; border-radius: 999px; font-size: 0.95rem;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+.chip.secondary { background: #fff; color: var(--accent); }
+
 .confirm-panel { border: 2px solid var(--warn); background: var(--warn-bg); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
 .confirm-panel h2 { margin-top: 0; color: var(--warn); }
 .victim-list { margin: 0.5rem 0 0; padding-inline-start: 1.2rem; }
@@ -119,6 +157,27 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 1rem; top: 0.5rem; background: #fff; padding: 0.5rem; z-index: 20; }
 """
+
+
+def _language_links(request: Request) -> Markup:
+    """Switch language without losing the page you are on.
+
+    Rendered as plain links carrying ``?lang=``, so it works with no
+    JavaScript and can be bookmarked.
+    """
+    from urllib.parse import urlencode
+
+    from app.i18n import AVAILABLE_LOCALES
+
+    links = []
+    for code, label in AVAILABLE_LOCALES:
+        if code == request.locale:
+            links.append(span(label, class_="lang-current"))
+            continue
+        query = {k: v for k, v in request.query.items() if k != "lang"}
+        query["lang"] = code
+        links.append(a(label, href=f"{request.path}?{urlencode(query)}", rel="nofollow"))
+    return div(*links, class_="lang-switch")
 
 
 def _nav_items(request: Request) -> list[tuple[str, str]]:
@@ -152,6 +211,8 @@ def page(
         for href, caption in _nav_items(request)
     ]
 
+    language = _language_links(request)
+
     if user is not None:
         account = div(
             span(f"{user.full_name}", class_="muted"),
@@ -177,6 +238,7 @@ def page(
                 a(t("app.name"), href="/", class_="brand"),
                 nav(ul(*links), class_="site-nav"),
                 account,
+                language,
                 class_="bar",
             )
             + raw("</header>"),

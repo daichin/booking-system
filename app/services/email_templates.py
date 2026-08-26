@@ -8,7 +8,7 @@ fallback part. Rendering is pure -- it never touches the database or the
 network -- so it can be called freely from tests.
 
 All wording lives in ``app/i18n/zh_TW_email.py``; this module only assembles
-it. Every email that shows a time uses :func:`app.timeutil.format_range_zh`,
+it. Every email that shows a time uses :func:`app.timeutil.format_range`,
 which always carries the ``(台北時間)`` label (spec §9.2).
 
 Expected ``context`` keys per kind
@@ -41,7 +41,8 @@ from typing import Any, Callable
 
 from app.config import load_config
 from app.i18n import t
-from app.timeutil import format_range_zh
+from app.i18n import current_locale
+from app.timeutil import format_range
 
 E5_PREEMPTED = "preempted"
 E5_ADMIN = "cancelled_by_admin"
@@ -152,7 +153,7 @@ def _e4(context: dict[str, Any]) -> RenderedEmail:
         full_name=context["full_name"],
         room_name=context["room_name"],
         title=context["title"],
-        time_range=format_range_zh(context["start_at"], context["end_at"]),
+        time_range=format_range(context["start_at"], context["end_at"], current_locale()),
         cancel_url=_link(context, "cancel_url", "/my"),
     )
     return _compose(subject, body)
@@ -178,7 +179,7 @@ def _e5(context: dict[str, Any]) -> RenderedEmail:
         full_name=context["full_name"],
         room_name=context["room_name"],
         title=context["title"],
-        time_range=format_range_zh(context["start_at"], context["end_at"]),
+        time_range=format_range(context["start_at"], context["end_at"], current_locale()),
         book_url=_link(context, "book_url", "/day"),
     )
     return _compose(subject, body)
@@ -192,7 +193,7 @@ def _e6(context: dict[str, Any]) -> RenderedEmail:
         full_name=context["full_name"],
         room_name=context["room_name"],
         title=context["title"],
-        time_range=format_range_zh(context["start_at"], context["end_at"]),
+        time_range=format_range(context["start_at"], context["end_at"], current_locale()),
     )
     return _compose(subject, body)
 
@@ -253,7 +254,7 @@ def _e10(context: dict[str, Any]) -> RenderedEmail:
         full_name=context["full_name"],
         room_name=context["room_name"],
         title=context["title"],
-        time_range=format_range_zh(context["start_at"], context["end_at"]),
+        time_range=format_range(context["start_at"], context["end_at"], current_locale()),
     )
     return _compose(subject, body)
 

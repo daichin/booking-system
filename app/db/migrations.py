@@ -205,12 +205,28 @@ CREATE TABLE cron_runs (
 CREATE INDEX ix_cron_runs_job ON cron_runs (job, started_at);
 """
 
+# --- 002 per-member interface language --------------------------------------
+#
+# The reminder job sends mail from a cron run with no browser attached, so the
+# language cannot come from a request header or cookie -- it has to be stored
+# against the member. Existing rows keep zh-TW, which is what they had.
+
+_ADD_LOCALE = """
+ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'zh-TW'
+"""
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version=1,
         name="initial",
         sqlite=_COMMON_TABLES.format(false="0", true="1"),
         postgres=_COMMON_TABLES.format(false="FALSE", true="TRUE"),
+    ),
+    Migration(
+        version=2,
+        name="user_locale",
+        sqlite=_ADD_LOCALE,
+        postgres=_ADD_LOCALE,
     ),
 ]
 

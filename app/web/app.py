@@ -15,11 +15,13 @@ from app.config import Config, load_config
 from app.db import Database, create_database
 from app.db.base import Connection
 from app.db.migrations import migrate
+from app import i18n
 from app.errors import AppError, ForbiddenError
 from app.settings import seed_defaults
 from app.timeutil import now_utc
 from app.web.framework import (
     CSRF_COOKIE,
+    LANG_COOKIE,
     SESSION_COOKIE,
     Request,
     Response,
@@ -70,6 +72,9 @@ def create_app(
         # was always refused.
         request.csrf_token = request.cookies.get(CSRF_COOKIE) or issue_csrf_token()
         request.user = _resolve_user(db, request)
+        request.locale = _resolve_locale(db, request)
+        # Every t() call for the rest of this request resolves in this locale.
+        i18n.set_locale(request.locale)
 
         if request.user is not None and request.user.must_change_password:
             if request.path not in _PASSWORD_CHANGE_ALLOWED:
@@ -79,6 +84,16 @@ def create_app(
         return None
 
     def after_request(request: Request, response: Response) -> Response:
+        # Remember an explicit language choice on this device.
+        chosen = request.query.get("lang")
+        if chosen and i18n.normalise(chosen) == request.locale:
+            response.set_cookie(
+                LANG_COOKIE,
+                request.locale,
+                http_only=False,
+                secure=request.is_secure,
+                max_age=60 * 60 * 24 * 365,
+            )
         # Issue a CSRF token to anyone who does not have one yet. It is
         # readable by design: the check is that it is echoed back, which a
         # cross-site form cannot do.
@@ -97,6 +112,47 @@ def create_app(
     app.config = config
     app.loaded_pages = loaded
     return app
+
+
+def _resolve_locale(db: Database, request: Request) -> str:
+    """Decide which language this response is rendered in.
+
+    Precedence: an explicit ``?lang=`` choice, then the signed-in member's
+    saved preference, then this device's cookie, then the browser's
+    ``Accept-Language``, then zh-TW.
+
+    An explicit choice by a signed-in member is written through to their
+    profile, because the reminder job has no browser to ask when it sends
+    their mail hours later.
+    """
+    chosen = request.query.get("lang")
+    if chosen:
+        locale = i18n.normalise(chosen)
+        user = request.user
+        if user is not None and user.locale != locale:
+            _save_locale(db, user.id, locale)
+        return locale
+
+    if request.user is not None and getattr(request.user, "locale", None):
+        return i18n.normalise(request.user.locale)
+
+    cookie = request.cookies.get(LANG_COOKIE)
+    if cookie:
+        return i18n.normalise(cookie)
+
+    return i18n.from_accept_header(
+        request.header("HTTP_ACCEPT_LANGUAGE") or ""
+    ) or i18n.DEFAULT_LOCALE
+
+
+def _save_locale(db: Database, user_id: str, locale: str) -> None:
+    def work(conn: Connection) -> None:
+        conn.execute(
+            "UPDATE users SET locale = ?, updated_at = ? WHERE id = ?",
+            (locale, now_utc(), user_id),
+        )
+
+    db.run_in_transaction(work)
 
 
 def _resolve_user(db: Database, request: Request):

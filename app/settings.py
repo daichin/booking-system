@@ -38,6 +38,10 @@ DEFAULTS: dict[str, Any] = {
     "invite_token_hours": 168,
     "reset_token_hours": 2,
     "daily_email_cap": 280,
+    # Not a business rule from §5, but the same reasoning applies: which
+    # meeting titles are common differs per organisation, so it belongs in
+    # the admin-editable settings rather than in the code.
+    "title_presets": ["部門會議", "週會", "專案討論", "面試", "客戶來訪", "一對一"],
 }
 
 #: Validation rules applied whenever an admin edits a setting.
@@ -121,6 +125,12 @@ class Settings:
     def daily_email_cap(self) -> int:
         return int(self.values["daily_email_cap"])
 
+    @property
+    def title_presets(self) -> list[str]:
+        """One-click meeting titles offered on the booking form."""
+        raw = self.values.get("title_presets") or []
+        return [str(item) for item in raw if str(item).strip()]
+
     def quota_for(self, level: int) -> int | None:
         """Simultaneous future confirmed bookings allowed at ``level``.
 
@@ -183,6 +193,19 @@ def coerce(key: str, raw: Any) -> Any:
         if isinstance(raw, bool):
             return raw
         return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+    if key == "title_presets":
+        value = json.loads(raw) if isinstance(raw, str) and raw.strip().startswith("[") \
+            else raw
+        if isinstance(value, str):
+            # An admin editing a textarea, one title per line.
+            value = [line.strip() for line in value.splitlines()]
+        if not isinstance(value, list):
+            raise AppError(INVALID_SETTING, {"key": key, "reason": "not_a_list"})
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) > 20:
+            raise AppError(INVALID_SETTING, {"key": key, "reason": "too_many"})
+        return cleaned
 
     if key == "quota_by_level":
         value = json.loads(raw) if isinstance(raw, str) else raw

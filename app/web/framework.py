@@ -28,13 +28,15 @@ from app.errors import (
     NOT_ADMIN,
     NOT_AUTHENTICATED,
 )
-from app.i18n import error_message, t
+from app.i18n import DEFAULT_LOCALE, error_message, t
 
 #: Name of the session cookie (CONTRACT.md §5).
 SESSION_COOKIE = "session"
 CSRF_COOKIE = "csrf"
 CSRF_FIELD = "_csrf"
 CSRF_HEADER = "HTTP_X_CSRF_TOKEN"
+#: Remembers a visitor's language choice on this device.
+LANG_COOKIE = "lang"
 
 log = logging.getLogger("app.web")
 
@@ -54,6 +56,9 @@ class Request:
         # on a visitor's very first response carries the same token the
         # response is about to set as a cookie.
         self.csrf_token = ""
+        # Resolved by the application before handlers run; every string
+        # the response renders is looked up in this locale.
+        self.locale = DEFAULT_LOCALE
         self.user = None          # set by the application after session lookup
         self.db = None
         self.config = None
@@ -404,7 +409,15 @@ class WSGIApp:
         from app.web.layout import error_page
 
         return Response.html(
-            error_page(request, code, error_message(error.code, **_humanise(error.details))),
+            error_page(
+                request,
+                code,
+                error_message(
+                    error.code,
+                    locale=request.locale,
+                    **_humanise(error.details, request.locale),
+                ),
+            ),
             code,
         )
 
@@ -428,7 +441,7 @@ def _describe_error(error: AppError) -> str:
 _SENSITIVE_DETAIL_KEYS = frozenset({"email", "to_email", "owner", "blocker", "token"})
 
 
-def _humanise(details: dict[str, Any]) -> dict[str, Any]:
+def _humanise(details: dict[str, Any], locale: str = DEFAULT_LOCALE) -> dict[str, Any]:
     """Translate machine field names before they reach a person.
 
     Services raise ``MISSING_FIELD`` with ``field="start_time"``; showing a
@@ -439,7 +452,7 @@ def _humanise(details: dict[str, Any]) -> dict[str, Any]:
         return details
     readable = dict(details)
     key = f"field.{details['field']}"
-    label = t(key)
+    label = t(key, locale=locale)
     readable["field"] = details["field"] if label == key else label
     return readable
 
