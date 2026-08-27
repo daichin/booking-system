@@ -28,7 +28,7 @@ from app.web.framework import (
     Router,
     require_login,
 )
-from app.web.html import Markup, a, button, div, field, form, hidden, notice, p
+from app.web.html import Markup, a, button, div, field, form, h2, hidden, notice, p
 from app.web.layout import page
 
 # --- helpers -----------------------------------------------------------------
@@ -117,7 +117,21 @@ def login_page(request: Request) -> Response:
     if request.user is not None:
         return Response.redirect("/day")
     next_value = _safe_next(request.query.get("next")) or ""
-    return Response.html(page(request, t("auth.login.title"), _login_form(request, next_value=next_value)))
+    # Deleting your own account lands here with the session already gone; say
+    # so, or it reads as having been logged out for no reason.
+    banners = (
+        [notice(t("account.deleted_notice"), kind="success")]
+        if request.query.get("deleted")
+        else None
+    )
+    return Response.html(
+        page(
+            request,
+            t("auth.login.title"),
+            _login_form(request, next_value=next_value),
+            banners=banners,
+        )
+    )
 
 
 def login_submit(request: Request) -> Response:
@@ -143,6 +157,107 @@ def login_submit(request: Request) -> Response:
 def logout(request: Request) -> Response:
     sessions.revoke_session(request.db, request.cookies.get(SESSION_COOKIE))
     response = Response.redirect("/login")
+    response.clear_cookie(SESSION_COOKIE)
+    return response
+
+
+# --- the account page (spec §8) ------------------------------------------------
+#
+# Until now /password was reachable only by the forced-change redirect: a member
+# who simply wanted to change their password had no link to it anywhere. This
+# page is the one place a member manages their own account, and it is where
+# deleting it lives, because deletion has to sit behind the same proof of
+# identity as a password change.
+
+
+def _account_details(user: models.User) -> Markup:
+    rows = [
+        (t("account.field.name"), user.full_name),
+        (t("account.field.email"), user.email),
+        (t("account.field.department"), user.department),
+        (t("account.field.level"), str(user.level)),
+    ]
+    return div(
+        h2(t("account.details.title")),
+        div(
+            *[
+                div(
+                    div(caption, class_="detail-label"),
+                    div(value, class_="detail-value"),
+                    class_="detail",
+                )
+                for caption, value in rows
+            ],
+            class_="detail-list",
+        ),
+        p(a(t("account.change_password"), href="/password")),
+        class_="panel",
+    )
+
+
+def _delete_form(request: Request, *, error: str = "") -> Markup:
+    """Deleting your own account, behind your own password.
+
+    The password is the confirmation step -- there is no second "are you
+    sure" screen, because a dialog you can click through without knowing
+    anything is weaker protection than a secret you have to type.
+    """
+    return div(
+        h2(t("account.delete.title")),
+        notice(error, kind="error") if error else Markup(""),
+        p(t("account.delete.explain")),
+        p(t("account.delete.keeps_history"), class_="muted"),
+        form(
+            _csrf_hidden(request),
+            field(
+                "current_password",
+                t("account.delete.password_label"),
+                type="password",
+                help_text=t("account.delete.password_help"),
+            ),
+            _actions(
+                button(t("account.delete.submit"), type="submit", class_="danger")
+            ),
+            method="post",
+            action="/account/delete",
+        ),
+        class_="panel danger-zone",
+    )
+
+
+def account_page(request: Request, *, error: str = "", status: int = 200) -> Response:
+    user = require_login(request)
+    return Response.html(
+        page(
+            request,
+            t("account.title"),
+            _account_details(user),
+            _delete_form(request, error=error),
+        ),
+        status,
+    )
+
+
+def account_delete_submit(request: Request) -> Response:
+    user = require_login(request)
+    try:
+        accounts.delete_account(
+            request.db,
+            actor=user,
+            user_id=user.id,
+            current_password=request.form.get("current_password") or "",
+        )
+    except AppError as err:
+        return account_page(
+            request,
+            error=error_message(err.code, **err.details),
+            status=err.status,
+        )
+
+    # The session was revoked inside the transaction; clearing the cookie
+    # stops the next request presenting a dead session and being bounced
+    # through the login page with no explanation.
+    response = Response.redirect("/login?deleted=1")
     response.clear_cookie(SESSION_COOKIE)
     return response
 
@@ -488,5 +603,7 @@ def register(router: Router) -> None:
     router.add("POST", "/forgot", forgot_submit)
     router.add("GET", "/reset", reset_page)
     router.add("POST", "/reset", reset_submit)
+    router.add("GET", "/account", account_page)
+    router.add("POST", "/account/delete", account_delete_submit)
     router.add("GET", "/password", password_page)
     router.add("POST", "/password", password_submit)

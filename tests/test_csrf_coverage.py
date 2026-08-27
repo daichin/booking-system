@@ -23,7 +23,7 @@ _PASSWORD = "a decent passphrase"
 
 #: Pages that render forms. Anonymous pages first, then member, then admin.
 ANONYMOUS_PAGES = ["/login", "/register", "/forgot"]
-MEMBER_PAGES = ["/day", "/week", "/my"]
+MEMBER_PAGES = ["/day", "/week", "/my", "/account", "/password"]
 ADMIN_PAGES = [
     "/admin",
     "/admin/approvals",
@@ -215,7 +215,7 @@ class DuplicateFieldTests(AppTestCase):
 
     def test_member_pages(self):
         self._login(admin=False)
-        self._assert_no_duplicates(["/day", "/week", "/my"])
+        self._assert_no_duplicates(MEMBER_PAGES)
 
     def test_admin_pages(self):
         self._login(admin=True)

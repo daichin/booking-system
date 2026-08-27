@@ -38,6 +38,7 @@ from app.errors import (
     INVALID_EMAIL,
     INVALID_LEVEL,
     INVALID_STATUS_TRANSITION,
+    LAST_ADMIN,
     INVITATION_NOT_FOUND,
     LOGIN_RATE_LIMITED,
     MISSING_FIELD,
@@ -905,6 +906,176 @@ def change_password(
     return db.run_in_transaction(work)
 
 
+# --- account deletion --------------------------------------------------------
+#
+# Deletion is anonymisation, not removal. Every booking, preemption record and
+# audit entry references users.id, and the cross-cutting rule is that those are
+# kept forever -- a DELETE would either cascade the history away or fail on the
+# foreign keys. So the row survives as a tombstone with every personal detail
+# scrubbed, and the history that points at it still resolves, now to a member
+# with no name and no address.
+
+
+#: What a tombstone's name and contact fields become. Stored rather than
+#: translated at render time: the value ends up in exported CSV, in the audit
+#: trail and in a booking history that other people read, and a single stored
+#: string is the same everywhere. It follows the default language, like the
+#: rest of the seeded content.
+def _tombstone_name() -> str:
+    return i18n.t("account.deleted_member", locale=i18n.DEFAULT_LOCALE)
+
+
+def _released_address(user_id: str) -> str:
+    """A placeholder that frees the real address for re-registration.
+
+    ``.invalid`` is reserved by RFC 2606 and can never be delivered to, and
+    the id keeps it unique against ``ux_users_email``.
+    """
+    return f"deleted+{user_id}@deleted.invalid"
+
+
+@dataclass
+class DeleteResult:
+    user_id: str
+    #: Future confirmed bookings released so the rooms are usable again.
+    cancelled_bookings: int
+
+
+def delete_account(
+    db: "Database",
+    *,
+    actor: "User",
+    user_id: str,
+    current_password: str | None = None,
+) -> DeleteResult:
+    """Anonymise an account, keeping every historical record that names it.
+
+    A member deletes their own account by proving they still hold the
+    password; an admin may delete anyone's without it. The member's future
+    confirmed bookings are cancelled in the same transaction, because leaving
+    them would hold rooms that nobody can now release -- the owner can no
+    longer log in to cancel them.
+
+    No email is sent. The mailbox has just been disowned, and telling a
+    deleted address about the bookings it lost is both useless and a way of
+    keeping the address in the outbound log.
+    """
+    deleting_self = actor.id == user_id
+    if not deleting_self and not actor.is_admin:
+        raise ForbiddenError(NOT_ADMIN)
+    if deleting_self:
+        if not current_password or not security.verify_password(
+            current_password, actor.password_hash
+        ):
+            raise AuthError(INVALID_CREDENTIALS)
+
+    def work(conn: "Connection") -> DeleteResult:
+        row = conn.query_one("SELECT * FROM users WHERE id = ?", (user_id,))
+        if row is None:
+            raise NotFoundError(USER_NOT_FOUND)
+        if row["deleted_at"] is not None:
+            # The row is already a tombstone. Reporting "not found" is the
+            # truth from the caller's point of view and keeps the operation
+            # from being repeatable against an account that no longer exists.
+            raise NotFoundError(USER_NOT_FOUND)
+
+        # An installation with no administrator cannot approve members, edit
+        # settings or recover itself, and nothing in the UI could undo it.
+        if row["is_admin"]:
+            remaining = conn.query_value(
+                "SELECT COUNT(*) FROM users WHERE is_admin = ? AND status = ?"
+                " AND deleted_at IS NULL AND id <> ?",
+                (True, models.ACTIVE, user_id),
+            )
+            if not remaining:
+                raise ConflictError(LAST_ADMIN)
+
+        now = now_utc()
+
+        # Release the rooms first, while the owner is still identifiable.
+        upcoming = conn.query_all(
+            "SELECT id FROM bookings WHERE user_id = ? AND status = ? AND end_at > ?",
+            (user_id, models.CONFIRMED, now),
+        )
+        cancelled_status = (
+            models.CANCELLED_BY_USER if deleting_self else models.CANCELLED_BY_ADMIN
+        )
+        for booking in upcoming:
+            conn.execute(
+                "UPDATE bookings SET status = ?, cancelled_at = ?, updated_at = ?"
+                " WHERE id = ? AND status = ?",
+                (cancelled_status, now, now, booking["id"], models.CONFIRMED),
+            )
+            # The reminder would arrive for a meeting that is no longer
+            # booked, addressed to a mailbox we have just disowned.
+            conn.execute(
+                "UPDATE email_log SET status = 'skipped',"
+                " error = 'account deleted' WHERE dedupe_key = ? AND status = 'queued'",
+                (f"reminder:{booking['id']}",),
+            )
+
+        conn.execute(
+            "UPDATE users SET email = ?, password_hash = ?, full_name = ?,"
+            " department = ?, phone = ?, status = ?, is_admin = ?,"
+            " must_change_password = ?, deleted_at = ?, updated_at = ?"
+            " WHERE id = ?",
+            (
+                _released_address(user_id),
+                # Not a blank or a constant: a value nobody has ever seen and
+                # nobody can produce, so no password matches this row again.
+                security.hash_password(security.new_token()[0]),
+                _tombstone_name(),
+                "-",
+                "-",
+                models.SUSPENDED,
+                False,
+                False,
+                now,
+                now,
+                user_id,
+            ),
+        )
+
+        # Anything still holding the door open.
+        conn.execute(
+            "UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+            (now, user_id),
+        )
+        conn.execute(
+            "UPDATE email_tokens SET revoked_at = ?"
+            " WHERE user_id = ? AND used_at IS NULL AND revoked_at IS NULL",
+            (now, user_id),
+        )
+
+        # The delivery log is history and stays, but the address in it is the
+        # single most identifying thing we hold; keeping it would leave the
+        # account deleted in name only. Queued mail to it is dropped.
+        conn.execute(
+            "UPDATE email_log SET status = 'skipped', error = 'account deleted'"
+            " WHERE to_email = ? AND status = 'queued'",
+            (row["email"],),
+        )
+        conn.execute(
+            "UPDATE email_log SET to_email = ? WHERE to_email = ?",
+            (_released_address(user_id), row["email"]),
+        )
+
+        audit.record(
+            conn,
+            actor_id=actor.id,
+            action=audit.USER_DELETED,
+            target_type="user",
+            target_id=user_id,
+            detail={
+                "self_service": deleting_self,
+                "bookings_cancelled": len(upcoming),
+            },
+        )
+        return DeleteResult(user_id=user_id, cancelled_bookings=len(upcoming))
+
+    return db.run_in_transaction(work)
+
+
 __all__ = [
     "EmailEvent",
     "RegisterResult",
@@ -923,5 +1094,7 @@ __all__ = [
     "request_password_reset",
     "reset_password",
     "change_password",
+    "delete_account",
+    "DeleteResult",
     "drain_dispatched",
 ]

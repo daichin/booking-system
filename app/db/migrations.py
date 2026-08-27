@@ -215,6 +215,20 @@ _ADD_LOCALE = """
 ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'zh-TW'
 """
 
+# --- 003 account deletion ---------------------------------------------------
+#
+# A deleted account is anonymised, not removed: booking history, preemption
+# records and the audit trail all point at users.id and must survive forever
+# (the cross-cutting rule that booking rows are never deleted). The row stays
+# as a tombstone with its personal details scrubbed, and this column is what
+# says so. It is a column rather than a new `status` value because status
+# carries a CHECK constraint listing its five values, and SQLite cannot alter
+# a constraint without rebuilding the table.
+
+_ADD_DELETED_AT = """
+ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ
+"""
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version=1,
@@ -227,6 +241,12 @@ MIGRATIONS: list[Migration] = [
         name="user_locale",
         sqlite=_ADD_LOCALE,
         postgres=_ADD_LOCALE,
+    ),
+    Migration(
+        version=3,
+        name="user_deleted_at",
+        sqlite=_ADD_DELETED_AT,
+        postgres=_ADD_DELETED_AT,
     ),
 ]
 

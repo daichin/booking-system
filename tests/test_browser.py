@@ -486,7 +486,7 @@ _LAYOUT_PROBE = """
 _WIDTHS = [(360, 740), (390, 844), (768, 1024), (1024, 768), (1400, 900)]
 
 _AUDITED_PAGES = [
-    "/day", "/week", "/my",
+    "/day", "/week", "/my", "/account",
     "/admin/members", "/admin/rooms", "/admin/settings",
 ]
 

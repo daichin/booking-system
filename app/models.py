@@ -66,15 +66,24 @@ class User:
     approved_by: str | None
     created_at: datetime
     updated_at: datetime
+    #: Set when the account was deleted. The row survives because booking
+    #: history, preemption records and the audit trail all reference it; its
+    #: personal details are scrubbed instead. A tombstone can never be
+    #: active, reactivated, or logged into.
+    deleted_at: datetime | None = None
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
     @property
     def is_active(self) -> bool:
-        return self.status == ACTIVE
+        return self.status == ACTIVE and not self.is_deleted
 
     @property
     def can_book(self) -> bool:
         """Spec §3: only approved members may create bookings."""
-        return self.status == ACTIVE
+        return self.status == ACTIVE and not self.is_deleted
 
     def public_view(self) -> dict[str, Any]:
         """Fields safe to show another member.
@@ -108,6 +117,7 @@ class User:
             approved_by=row["approved_by"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            deleted_at=row.get("deleted_at"),
         )
 
 

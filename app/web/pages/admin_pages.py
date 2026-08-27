@@ -507,15 +507,43 @@ def _members_list(request: Request) -> Response:
                 )
             else:
                 toggle_form = ""
+
+            # Deleting yourself always costs your own password, so an admin
+            # deleting their own account goes through the member screen where
+            # they can type it. The admin route has no password to offer and
+            # would only report the credentials as wrong.
+            delete_link = html.a(
+                t("admin.members.delete"),
+                href=(
+                    "/account"
+                    if request.user is not None and row["id"] == request.user.id
+                    else f"/admin/members/{row['id']}/delete{_qs(filters)}"
+                ),
+                class_="btn danger",
+            )
+
+            if row["deleted_at"] is not None:
+                # A tombstone has nothing left to administer: its level,
+                # suspension and deletion are all meaningless now. The row
+                # stays visible so the admin can see what became of it.
+                status_cell = html.span(
+                    t("admin.members.deleted_tag"), class_="tag tag-cancelled"
+                )
+                actions = html.span("-", class_="muted")
+            else:
+                status_cell = _status_label(row["status"])
+                actions = html.div(level_form, toggle_form, delete_link,
+                                   class_="actions")
+
             table_rows.append(
                 html.tr(
                     html.td(row["full_name"]),
                     html.td(row["email"]),
                     html.td(row["department"]),
                     html.td(str(row["level"])),
-                    html.td(_status_label(row["status"])),
+                    html.td(status_cell),
                     html.td(_fmt(row["created_at"])),
-                    html.td(html.div(level_form, toggle_form, class_="actions")),
+                    html.td(actions),
                 )
             )
         table = html.div(
@@ -559,6 +587,74 @@ def _members_set_level(request: Request) -> Response:
         code = exc.code if isinstance(exc, AppError) else "INVALID_LEVEL"
         return _members_redirect(request, err=code)
     return _members_redirect(request, msg="level_changed")
+
+
+def _members_delete_confirm(request: Request) -> Response:
+    """Ask before destroying something no screen can undo.
+
+    An admin has no password of the member's to type, so a page that spells
+    out what goes and what stays is the confirmation step. It is a GET, so
+    landing here by mistake changes nothing.
+    """
+    actor = _guard(request)
+    user_id = request.params["user_id"]
+    if user_id == actor.id:
+        return Response.redirect("/account")
+    row = request.db.run_in_transaction(
+        lambda conn: conn.query_one("SELECT * FROM users WHERE id = ?", (user_id,))
+    )
+    if row is None or row["deleted_at"] is not None:
+        return _members_redirect(request, err="USER_NOT_FOUND")
+
+    filters = _member_filters(request)
+    return _shell(
+        request,
+        t("admin.members.delete.title"),
+        html.div(
+            html.p(
+                t(
+                    "admin.members.delete.confirm",
+                    name=row["full_name"],
+                    email=row["email"],
+                )
+            ),
+            html.p(t("admin.members.delete.explain")),
+            html.p(t("admin.members.delete.keeps_history"), class_="muted"),
+            html.form(
+                _csrf(request),
+                *[html.hidden(k, v) for k, v in filters.items()],
+                html.div(
+                    html.button(
+                        t("admin.members.delete.submit"),
+                        type="submit",
+                        class_="danger",
+                    ),
+                    html.a(
+                        t("admin.members.delete.cancel"),
+                        href=f"/admin/members{_qs(filters)}",
+                        class_="btn secondary",
+                    ),
+                    class_="actions",
+                ),
+                method="post",
+                action=f"/admin/members/{user_id}/delete",
+            ),
+            class_="panel danger-zone",
+        ),
+    )
+
+
+def _members_delete(request: Request) -> Response:
+    actor = _guard(request)
+    if request.params["user_id"] == actor.id:
+        return Response.redirect("/account")
+    try:
+        accounts.delete_account(
+            request.db, actor=actor, user_id=request.params["user_id"]
+        )
+    except AppError as exc:
+        return _members_redirect(request, err=exc.code)
+    return _members_redirect(request, msg="account_deleted")
 
 
 def _members_suspend(request: Request) -> Response:
@@ -1590,6 +1686,8 @@ def register(router: Router) -> None:
 
     router.add("GET", "/admin/members", _members_list)
     router.add("POST", "/admin/members/{user_id}/level", _members_set_level)
+    router.add("GET", "/admin/members/{user_id}/delete", _members_delete_confirm)
+    router.add("POST", "/admin/members/{user_id}/delete", _members_delete)
     router.add("POST", "/admin/members/{user_id}/suspend", _members_suspend)
     router.add("POST", "/admin/members/{user_id}/reactivate", _members_reactivate)
 

@@ -130,6 +130,16 @@ input[type="checkbox"], input[type="radio"] {
   accent-color: var(--accent);
 }
 label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+
+/* Read-only account details, and the one place on the site that destroys
+   something. The red border is the only warning a reader gets before the
+   button, so it is part of the layout rather than a decoration. */
+.detail-list { display: grid; gap: 0.6rem; margin-bottom: 1rem; }
+@media (min-width: 600px) { .detail-list { grid-template-columns: 1fr 1fr; } }
+.detail-label { color: var(--muted); font-size: 0.85rem; }
+.detail-value { overflow-wrap: anywhere; }
+.danger-zone { border-color: #f2c4c0; }
+.danger-zone h2 { color: var(--err); margin-top: 0; }
 .help { color: var(--muted); display: block; margin-top: 0.2rem; }
 button, .btn {
   font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px;
@@ -373,6 +383,9 @@ def _nav_items(request: Request) -> list[tuple[str, str]]:
         ("/day", t("nav.day")),
         ("/week", t("nav.week")),
         ("/my", t("nav.my_bookings")),
+        # Also the only route to the password screen, which until now was
+        # reachable only by the forced-change redirect.
+        ("/account", t("nav.account")),
     ]
     if user.is_admin:
         items.append(("/admin", t("nav.admin")))
