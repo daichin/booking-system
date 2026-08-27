@@ -38,6 +38,12 @@ DEFAULTS: dict[str, Any] = {
     "invite_token_hours": 168,
     "reset_token_hours": 2,
     "daily_email_cap": 280,
+    # Spec §9.4 says three. It is a setting rather than a constant because
+    # how many attempts are worth making depends on how reliable the mail
+    # provider turns out to be, which cannot be known from here -- and the
+    # cost of giving up too early is a member never learning their booking
+    # was cancelled.
+    "email_max_attempts": 3,
     # Not a business rule from §5, but the same reasoning applies: which
     # meeting titles are common differs per organisation, so it belongs in
     # the admin-editable settings rather than in the code. Shipped in the
@@ -60,6 +66,7 @@ _INT_RANGES = {
     "invite_token_hours": (1, 8760),
     "reset_token_hours": (1, 8760),
     "daily_email_cap": (0, 100000),
+    "email_max_attempts": (1, 20),
 }
 
 
@@ -129,6 +136,10 @@ class Settings:
     @property
     def daily_email_cap(self) -> int:
         return int(self.values["daily_email_cap"])
+
+    @property
+    def email_max_attempts(self) -> int:
+        return int(self.values["email_max_attempts"])
 
     @property
     def title_presets(self) -> list[str]:

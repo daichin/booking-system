@@ -34,6 +34,12 @@ from app.web.framework import (
 #: password (spec §10.3), otherwise they would be trapped in a redirect loop.
 _PASSWORD_CHANGE_ALLOWED = frozenset({"/password", "/logout", "/api/health"})
 
+#: How much queued mail one request will try to deliver before handing the
+#: rest back to the cron. Small on purpose: this runs while someone is
+#: waiting for their page, and the point is that *their* message goes out
+#: now, not that the whole backlog clears.
+_FLUSH_LIMIT = 5
+
 #: Page modules to load if present. Each exposes ``register(router)``.
 _PAGE_MODULES = (
     "app.web.pages.auth_pages",
@@ -106,7 +112,33 @@ def create_app(
                 secure=request.is_secure,
                 max_age=60 * 60 * 12,
             )
+        _flush_mail()
         return response
+
+    def _flush_mail() -> None:
+        """Send anything this request queued, before we stop working.
+
+        Without this the only thing that ever flushed the queue was the
+        reminder cron, so every message -- a verification link included --
+        waited up to fifteen minutes. The hint means a request that queued
+        nothing does no work at all.
+
+        Deliberately synchronous: at this scale one transport round-trip is
+        cheaper than owning a background thread under gunicorn. `limit` keeps
+        an unlucky request from paying for a whole backlog; the cron picks up
+        whatever is left. Any transport failure is swallowed, because the
+        response is already built and the row stays queued for the next
+        attempt either way -- a mail provider being down must never turn a
+        successful booking into an error page.
+        """
+        from app.services import mailer
+
+        if not mailer.take_pending_hint():
+            return
+        try:
+            mailer.send_pending(db, limit=_FLUSH_LIMIT)
+        except Exception:  # noqa: BLE001 - never break a built response
+            pass
 
     app = WSGIApp(router, on_request=on_request, after_request=after_request)
     app.db = db

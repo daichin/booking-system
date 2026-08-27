@@ -229,6 +229,22 @@ _ADD_DELETED_AT = """
 ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ
 """
 
+# --- 004 durable email render context ---------------------------------------
+#
+# The data needed to *render* a queued email used to live only in the web
+# process's memory, keyed by the email_log row id. Render's free tier sleeps
+# the process after 15 minutes idle, and the only thing that flushes the queue
+# is a cron call every 15 minutes -- so the process that queued a message was
+# usually not the process that came to send it, the context was gone, and the
+# row was marked failed with 'context_unavailable' having never used a single
+# retry. E5 "your booking was preempted" notices were among the mail lost that
+# way, which the spec requires be delivered. Persisting the context makes any
+# process able to render any queued message.
+
+_ADD_EMAIL_CONTEXT = """
+ALTER TABLE email_log ADD COLUMN context TEXT
+"""
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version=1,
@@ -247,6 +263,12 @@ MIGRATIONS: list[Migration] = [
         name="user_deleted_at",
         sqlite=_ADD_DELETED_AT,
         postgres=_ADD_DELETED_AT,
+    ),
+    Migration(
+        version=4,
+        name="email_context",
+        sqlite=_ADD_EMAIL_CONTEXT,
+        postgres=_ADD_EMAIL_CONTEXT,
     ),
 ]
 

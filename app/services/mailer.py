@@ -4,26 +4,38 @@ interface: :class:`EmailEvent`, :func:`enqueue`, :func:`send_pending`,
 
 Design notes
 ------------
-``email_log`` (spec §4.7) has no column for a rendered message body -- only
-``subject`` for admin visibility. Two things follow from that:
+``email_log`` (spec §4.7) has no column for a rendered message *body* -- only
+``subject``, for admin visibility. What it does carry is ``context``: the
+values a template needs to render itself (recipient name, booking time, the
+URL a one-time token is embedded in). That column exists because the previous
+design kept the context in an in-process dict instead, and that was wrong.
 
-1. The context needed to *render* a queued email (recipient name, booking
-   time, one-time tokens embedded in a link, ...) is kept in an in-process
-   cache (``_CONTEXT_CACHE``) keyed by the ``email_log`` row id, populated by
-   :func:`enqueue` and consumed by :func:`send_pending`. This is sufficient
-   for this deployment: the web process is long-lived (Render), and a queued
-   row is normally flushed within the same request that created it. A row
-   that outlives the process (a crash between enqueue and send) cannot be
-   re-rendered and is surfaced as ``failed`` rather than silently lost.
-2. One-time secrets (verification/invite/reset tokens) are only ever known
-   to the caller that minted them, so they must already be embedded as full
-   URLs in ``EmailEvent.context`` by the time it reaches :func:`enqueue`.
+The reasoning had been that the web process is long-lived, so a queued row
+would be flushed by the same process that created it. On Render's free tier
+it is not: the process sleeps after 15 minutes idle, and the queue is flushed
+by a cron call on the same 15-minute cadence, so the sending process was
+usually a *fresh* one with an empty cache. Every such message was marked
+``failed`` with ``context_unavailable`` -- without consuming a single retry,
+and with no way to reconstruct it. Mail lost that way included E5 "your
+booking was preempted", which the spec requires be delivered.
+
+Persisting the context means any process can render any queued message, so a
+retry survives a restart and an admin can force a resend. Two consequences:
+
+1. One-time secrets (verification/invite/reset tokens) are only ever known to
+   the caller that minted them, so they must already be embedded as full URLs
+   in ``EmailEvent.context`` by the time it reaches :func:`enqueue` -- and
+   they therefore land in the database. :data:`_TOKEN_KINDS` names the kinds
+   that carry one, and their context is dropped the moment delivery succeeds,
+   so no live token outlives the mail that carried it.
+2. Everything else keeps its context, which is what makes the admin resend
+   button work for the messages people actually ask to have sent again.
 
 Retries never sleep in-process (spec instruction): a failed send increments
-``email_log.attempts`` and leaves the row ``queued`` until three attempts
-have been made, at which point it becomes ``failed``. A later call to
-:func:`send_pending` -- from the next request, or the reminder cron -- is
-what actually retries it.
+``email_log.attempts`` and leaves the row ``queued`` until the attempt budget
+is spent, at which point it becomes ``failed``. A later call to
+:func:`send_pending` -- from the request that queued it, from the next
+request, or from the reminder cron -- is what actually retries it.
 
 Emails are only ever sent from outside a database transaction (CONTRACT.md
 §3 rule 6): every write to ``email_log`` is its own short transaction, wrapped
@@ -33,16 +45,23 @@ transaction.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from contextlib import contextmanager
 
 from app import i18n, models
 from app.db.base import Connection, Database
+from app.errors import (
+    ConflictError,
+    EMAIL_LOG_NOT_FOUND,
+    EMAIL_NOT_RESENDABLE,
+    NotFoundError,
+)
 from app.services import email_templates
 from app.services.transports import Message, Transport, build_transport
 from app.settings import Settings
@@ -65,8 +84,17 @@ _PRIORITY_ORDER = (
     " WHEN type = 'E10' THEN 2 ELSE 1 END"
 )
 
+#: Kinds whose context contains a live one-time token embedded in a URL.
+#: Their context is discarded as soon as delivery succeeds, so a token never
+#: outlives the message carrying it. They are also the kinds an admin never
+#: needs to resend: the member can ask for a fresh link themselves, and a new
+#: token is a better answer than a copy of an old one.
+_TOKEN_KINDS = frozenset({"E1", "E8", "E9"})
+
 #: Attempts before a failed send becomes terminal (spec §9.4: "retried up to
-#: 3 times ... then marked failed").
+#: 3 times ... then marked failed"). The spec's 3 is the default; it is a
+#: setting because how many attempts are worth making depends on how reliable
+#: the provider turns out to be, which is not knowable from here.
 MAX_ATTEMPTS = 3
 
 #: At most one E7 digest per admin per hour (spec §9.4 / §12 D4).
@@ -98,25 +126,54 @@ class ReminderReport:
     skipped: int = 0
 
 
-# --- in-process render context cache ----------------------------------------
+# --- render context, stored on the row --------------------------------------
 
-_CACHE_LOCK = threading.Lock()
-_CONTEXT_CACHE: dict[str, EmailEvent] = {}
-
-
-def _remember(row_id: str, event: EmailEvent) -> None:
-    with _CACHE_LOCK:
-        _CONTEXT_CACHE[row_id] = event
+#: Marks an encoded datetime. A bare ISO string would be indistinguishable
+#: from a caller's own string and would come back as the wrong type, which
+#: the templates would then format as a raw timestamp.
+_DT_KEY = "__datetime__"
 
 
-def _recall(row_id: str) -> EmailEvent | None:
-    with _CACHE_LOCK:
-        return _CONTEXT_CACHE.get(row_id)
+def _encode_context(context: dict[str, Any]) -> str:
+    def default(value: Any) -> Any:
+        if isinstance(value, datetime):
+            return {_DT_KEY: value.isoformat()}
+        raise TypeError(
+            f"email context value of type {type(value).__name__} cannot be"
+            " stored; add an encoding for it rather than dropping it"
+        )
+
+    return json.dumps(context, default=default)
 
 
-def _forget(row_id: str) -> None:
-    with _CACHE_LOCK:
-        _CONTEXT_CACHE.pop(row_id, None)
+def _decode_context(raw: str | None) -> dict[str, Any] | None:
+    if not raw:
+        return None
+
+    def hook(obj: dict[str, Any]) -> Any:
+        if len(obj) == 1 and _DT_KEY in obj:
+            return datetime.fromisoformat(obj[_DT_KEY])
+        return obj
+
+    return json.loads(raw, object_hook=hook)
+
+
+#: Set by :func:`enqueue` so the web layer knows a flush is worth doing after
+#: the response is built, instead of querying for queued mail on every single
+#: request. Only ever a hint: a stale True costs one cheap query, and the
+#: reminder cron flushes regardless.
+_pending_hint = threading.Event()
+
+
+def note_pending() -> None:
+    _pending_hint.set()
+
+
+def take_pending_hint() -> bool:
+    """True (once) if mail may be waiting. Clears the hint."""
+    was_set = _pending_hint.is_set()
+    _pending_hint.clear()
+    return was_set
 
 
 # --- transport selection -----------------------------------------------------
@@ -229,16 +286,20 @@ def _rendering_for(locale: str):
 
 
 def _attempt_send(
-    db: Database, row: dict[str, Any], event: EmailEvent, transport: Transport
+    db: Database,
+    row: dict[str, Any],
+    context: dict[str, Any],
+    transport: Transport,
+    max_attempts: int,
 ) -> bool | None:
     """Try to deliver one queued row. Returns ``True`` (sent), ``False``
     (exhausted retries, now ``failed``), or ``None`` (transient failure,
     still ``queued`` for a later call)."""
     with _rendering_for(_locale_for(db, row["to_email"])):
-        rendered = email_templates.render(row["type"], event.context)
+        rendered = email_templates.render(row["type"], context)
     message = Message(
         to_email=row["to_email"],
-        to_name=event.context.get("full_name"),
+        to_name=context.get("full_name"),
         subject=rendered.subject,
         html=rendered.html,
         text=rendered.text,
@@ -247,19 +308,25 @@ def _attempt_send(
     attempts = int(row["attempts"]) + 1
 
     if result.ok:
-        _update_row(
-            db,
-            row["id"],
-            status="sent",
-            provider_message_id=result.message_id,
-            error=None,
-            attempts=attempts,
-            sent_at=now_utc(),
-        )
-        _forget(row["id"])
+        delivered: dict[str, Any] = {
+            "status": "sent",
+            "provider_message_id": result.message_id,
+            "error": None,
+            "attempts": attempts,
+            "sent_at": now_utc(),
+        }
+        if row["type"] in _TOKEN_KINDS:
+            # Delivered, so the link has reached the person it was minted
+            # for. A live token has no business staying in the log.
+            delivered["context"] = None
+        _update_row(db, row["id"], **delivered)
         return True
 
-    terminal = attempts >= MAX_ATTEMPTS
+    # A failure keeps its context, whether or not the budget is spent. That
+    # is what lets the next call -- the next request, or the next cron tick
+    # -- pick the row up and try again with nobody intervening, and what
+    # gives the admin's resend button something to work with.
+    terminal = attempts >= max_attempts
     _update_row(
         db,
         row["id"],
@@ -267,10 +334,7 @@ def _attempt_send(
         error=result.error,
         attempts=attempts,
     )
-    if terminal:
-        _forget(row["id"])
-        return False
-    return None
+    return False if terminal else None
 
 
 def _mark_preemption_notified(db: Database, row: dict[str, Any]) -> None:
@@ -298,19 +362,22 @@ def _send_row(
     transport: Transport,
     sent_today: list[int],
     cap: int,
+    max_attempts: int,
 ) -> str:
     """Deliver (or skip/fail) one queued row. Returns "sent"/"failed"/"skipped"."""
-    event = _recall(row["id"])
-    if event is None:
+    context = _decode_context(row.get("context"))
+    if context is None:
+        # Only reachable for a row queued before this column existed, or one
+        # already delivered. Its content is genuinely unrecoverable, so say
+        # so rather than retrying something that can never succeed.
         _update_row(db, row["id"], status="failed", error="context_unavailable")
         return "failed"
 
     if row["type"] not in _CRITICAL_KINDS and sent_today[0] >= cap:
         _update_row(db, row["id"], status="skipped", error="daily_cap_reached")
-        _forget(row["id"])
         return "skipped"
 
-    outcome = _attempt_send(db, row, event, transport)
+    outcome = _attempt_send(db, row, context, transport, max_attempts)
     if outcome is True:
         sent_today[0] += 1
         _mark_preemption_notified(db, row)
@@ -352,8 +419,9 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
             try:
                 conn.execute(
                     "INSERT INTO email_log (id, to_email, type, subject, status,"
-                    " related_booking_id, dedupe_key, attempts, created_at)"
-                    " VALUES (?, ?, ?, ?, 'queued', ?, ?, 0, ?)",
+                    " related_booking_id, dedupe_key, attempts, created_at,"
+                    " context)"
+                    " VALUES (?, ?, ?, ?, 'queued', ?, ?, 0, ?, ?)",
                     (
                         row_id,
                         event.to_email,
@@ -362,6 +430,7 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
                         event.related_booking_id,
                         event.dedupe_key,
                         now_utc(),
+                        _encode_context(event.context),
                     ),
                 )
             except Exception as exc:  # noqa: BLE001 - narrowed immediately below
@@ -377,12 +446,9 @@ def enqueue(db: Database, events: list[EmailEvent]) -> list[str]:
 
     results = db.run_in_transaction(work)
 
-    ids: list[str] = []
-    for event, row_id in zip(events, results):
-        if row_id is None:
-            continue
-        _remember(row_id, event)
-        ids.append(row_id)
+    ids = [row_id for row_id in results if row_id is not None]
+    if ids:
+        note_pending()
     return ids
 
 
@@ -398,6 +464,7 @@ def send_pending(
     transport = transport or _default_transport()
     settings = db.run_in_transaction(Settings.load)
     cap = settings.daily_email_cap
+    max_attempts = settings.email_max_attempts
     sent_today = [db.run_in_transaction(_count_sent_today)]
 
     rows = db.run_in_transaction(
@@ -410,7 +477,7 @@ def send_pending(
 
     report = SendReport()
     for row in rows:
-        outcome = _send_row(db, row, transport, sent_today, cap)
+        outcome = _send_row(db, row, transport, sent_today, cap, max_attempts)
         if outcome == "sent":
             report.sent += 1
         elif outcome == "skipped":
@@ -418,6 +485,44 @@ def send_pending(
         else:
             report.failed += 1
     return report
+
+
+def can_resend(row: dict[str, Any]) -> bool:
+    """Whether this log row still holds enough to be sent again.
+
+    False once a one-time link has been delivered and its context dropped.
+    That is not a limitation to work around: reissuing a fresh verification
+    or reset link is both safer and already available to the member.
+    """
+    return bool(row.get("context"))
+
+
+def resend(db: Database, row_id: str, *, transport: Transport | None = None) -> bool:
+    """Queue a logged email again and try to deliver it now.
+
+    For an admin acting on "I deleted that email, can you send it again?".
+    Retrying after a failure needs no button -- a failed row keeps its
+    context and the next flush picks it up on its own.
+
+    Raises :class:`NotFoundError` if the row is gone and
+    :class:`ConflictError` if it can no longer be rendered.
+    """
+
+    def load(conn: Connection) -> dict[str, Any] | None:
+        return conn.query_one("SELECT * FROM email_log WHERE id = ?", (row_id,))
+
+    row = db.run_in_transaction(load)
+    if row is None:
+        raise NotFoundError(EMAIL_LOG_NOT_FOUND)
+    if not can_resend(row):
+        raise ConflictError(EMAIL_NOT_RESENDABLE)
+
+    # Attempts start over: this is a fresh decision by a person, not a
+    # continuation of the automatic retry budget that already ran out.
+    _update_row(db, row_id, status="queued", error=None, attempts=0, sent_at=None)
+    note_pending()
+    report = send_pending(db, limit=1, transport=transport)
+    return report.sent == 1
 
 
 def run_reminders(db: Database, *, transport: Transport | None = None) -> ReminderReport:
@@ -433,6 +538,7 @@ def run_reminders(db: Database, *, transport: Transport | None = None) -> Remind
 
     window_end = started + timedelta(minutes=settings.reminder_lead_minutes)
     cap = settings.daily_email_cap
+    max_attempts = settings.email_max_attempts
     sent_today = [db.run_in_transaction(_count_sent_today)]
 
     try:
@@ -486,7 +592,7 @@ def run_reminders(db: Database, *, transport: Transport | None = None) -> Remind
                     "SELECT * FROM email_log WHERE id = ?", (rid,)
                 )
             )
-            outcome = _send_row(db, row, transport, sent_today, cap)
+            outcome = _send_row(db, row, transport, sent_today, cap, max_attempts)
             if outcome == "sent":
                 report.sent += 1
             elif outcome == "skipped":
@@ -512,6 +618,7 @@ def run_admin_digest(db: Database, *, transport: Transport | None = None) -> int
     transport = transport or _default_transport()
     settings = db.run_in_transaction(Settings.load)
     cap = settings.daily_email_cap
+    max_attempts = settings.email_max_attempts
     sent_today = [db.run_in_transaction(_count_sent_today)]
 
     admins = db.run_in_transaction(
@@ -559,7 +666,7 @@ def run_admin_digest(db: Database, *, transport: Transport | None = None) -> int
                 "SELECT * FROM email_log WHERE id = ?", (rid,)
             )
         )
-        if _send_row(db, row, transport, sent_today, cap) == "sent":
+        if _send_row(db, row, transport, sent_today, cap, max_attempts) == "sent":
             sent_count += 1
     return sent_count
 
@@ -570,6 +677,8 @@ __all__ = [
     "ReminderReport",
     "enqueue",
     "send_pending",
+    "resend",
+    "can_resend",
     "run_reminders",
     "run_admin_digest",
     "set_default_transport",

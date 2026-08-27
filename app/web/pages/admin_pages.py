@@ -25,7 +25,7 @@ from urllib.parse import urlencode
 from app import models
 from app.errors import AppError, CONFIRMATION_REQUIRED
 from app.i18n import error_message, t
-from app.services import accounts, audit, preemption, rooms
+from app.services import accounts, audit, mailer, preemption, rooms
 from app.services import bookings as bookings_service
 from app.services.mailer import enqueue as mailer_enqueue
 from app.settings import DEFAULTS as SETTINGS_DEFAULTS
@@ -1559,17 +1559,34 @@ def _emails_list(request: Request) -> Response:
     if not rows:
         table = html.p(t("admin.emails.empty"), class_="muted")
     else:
-        table_rows = [
-            html.tr(
-                html.td(_fmt(row["created_at"])),
-                html.td(row["type"]),
-                html.td(row["to_email"]),
-                html.td(t(f"admin.emails.status_{row['status']}")),
-                html.td(row["error"] or "-"),
-                html.td(str(row["attempts"])),
+        table_rows = []
+        for row in rows:
+            if mailer.can_resend(row):
+                action = html.form(
+                    _csrf(request),
+                    html.button(t("admin.emails.resend"), type="submit",
+                                class_="secondary"),
+                    method="post",
+                    action=f"/admin/emails/{row['id']}/resend",
+                    class_="inline-form",
+                )
+            else:
+                # Says why the button is missing. Without this the page just
+                # looks inconsistent -- some rows have it, some do not.
+                action = html.span(
+                    t("admin.emails.resend.unavailable"), class_="muted"
+                )
+            table_rows.append(
+                html.tr(
+                    html.td(_fmt(row["created_at"])),
+                    html.td(row["type"]),
+                    html.td(row["to_email"]),
+                    html.td(t(f"admin.emails.status_{row['status']}")),
+                    html.td(row["error"] or "-"),
+                    html.td(str(row["attempts"])),
+                    html.td(action),
+                )
             )
-            for row in rows
-        ]
         table = html.div(
             html.table(
                 html.thead(
@@ -1580,6 +1597,7 @@ def _emails_list(request: Request) -> Response:
                         html.th(t("admin.emails.col_status")),
                         html.th(t("admin.emails.col_error")),
                         html.th(t("admin.emails.col_attempts")),
+                        html.th(t("admin.emails.col_actions")),
                     )
                 ),
                 html.tbody(*table_rows),
@@ -1588,6 +1606,14 @@ def _emails_list(request: Request) -> Response:
         )
     return _shell(request, t("admin.emails.title"), html.div(table, class_="panel"))
 
+
+def _emails_resend(request: Request) -> Response:
+    _guard(request)
+    try:
+        mailer.resend(request.db, request.params["email_id"])
+    except AppError as exc:
+        return Response.redirect(f"/admin/emails?err={exc.code}")
+    return Response.redirect("/admin/emails?msg=email_resent")
 
 # =============================================================================
 # Audit trail
@@ -1710,5 +1736,6 @@ def register(router: Router) -> None:
     router.add("POST", "/admin/settings", _settings_save)
 
     router.add("GET", "/admin/emails", _emails_list)
+    router.add("POST", "/admin/emails/{email_id}/resend", _emails_resend)
 
     router.add("GET", "/admin/audit", _audit_list)

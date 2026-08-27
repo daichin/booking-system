@@ -118,6 +118,10 @@ INVALID_STATUS_TRANSITION = "INVALID_STATUS_TRANSITION"
 LAST_ADMIN = "LAST_ADMIN"
 ROOM_HAS_BOOKINGS = "ROOM_HAS_BOOKINGS"
 INVALID_SETTING = "INVALID_SETTING"
+#: The log row has no stored context, so the message cannot be rebuilt.
+#: True of verification/invite/reset mail once it has been delivered.
+EMAIL_NOT_RESENDABLE = "EMAIL_NOT_RESENDABLE"
+EMAIL_LOG_NOT_FOUND = "EMAIL_LOG_NOT_FOUND"
 CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
 
 # --- Accounts, added by Task 1 -----------------------------------------------
