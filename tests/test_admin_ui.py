@@ -154,7 +154,7 @@ class MembersTests(AdminUITestBase):
         member = self.create_user(level=2)
         self.login(admin)
 
-        ok = self.client.post(f"/admin/members/{member.id}/level", form={"level": "7"})
+        ok = self.client.post(f"/admin/members/{member.id}/level", form={"new_level": "7"})
         self.assertEqual(ok.status, 303)
         self.assertEqual(self.get_user(member.id).level, 7)
 
@@ -164,7 +164,7 @@ class MembersTests(AdminUITestBase):
         )
         self.assertEqual(len(audit_rows), 1)
 
-        bad = self.client.post(f"/admin/members/{member.id}/level", form={"level": "99"})
+        bad = self.client.post(f"/admin/members/{member.id}/level", form={"new_level": "99"})
         self.assertEqual(bad.status, 303)
         self.assertIn("err=", bad.location)
         self.assertEqual(self.get_user(member.id).level, 7)  # unchanged
@@ -388,7 +388,7 @@ class PreemptionsAndAuditTests(AdminUITestBase):
         admin = self.create_user(is_admin=True)
         member = self.create_user(level=1)
         self.login(admin)
-        self.client.post(f"/admin/members/{member.id}/level", form={"level": "4"})
+        self.client.post(f"/admin/members/{member.id}/level", form={"new_level": "4"})
 
         page = self.client.get("/admin/audit")
         self.assertEqual(page.status, 200)
