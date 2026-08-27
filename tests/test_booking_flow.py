@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
+from app import i18n
 from app.config import Config
 from app.models import CONFIRMED
 from app.settings import Settings
@@ -268,6 +269,49 @@ class LanguageTests(BookingFlowTestBase):
             "/login", headers={"HTTP_ACCEPT_LANGUAGE": "en-GB,en;q=0.9"}
         )
         self.assertIn("Log in", response.text)
+
+    def test_the_switcher_is_a_globe_with_an_accessible_name(self):
+        """Icon-only, because a language name has no predictable width.
+
+        The header already has to hold the nav, the member's name and a
+        log-out button; "English" beside the icon is what pushed it onto a
+        third row. An icon needs a text alternative, so the accessible name
+        is asserted rather than assumed.
+        """
+        html = self.client.get("/day?lang=en").text
+        switcher = re.search(r'<details class="lang-switch".*?</details>', html, re.S)
+        self.assertIsNotNone(switcher, "the language switcher is missing")
+        markup = switcher.group(0)
+
+        self.assertIn("<svg", markup, "the switcher has no globe")
+        self.assertIn('aria-label="Language"', markup)
+        self.assertIn('class="visually-hidden">Language<', markup)
+        # No language name is painted next to the icon.
+        self.assertNotIn(">English</summary>", markup)
+
+    def test_the_menu_lists_every_language_and_marks_the_current_one(self):
+        html = self.client.get("/day?lang=en").text
+        markup = re.search(
+            r'<details class="lang-switch".*?</details>', html, re.S
+        ).group(0)
+
+        for _code, label in i18n.AVAILABLE_LOCALES:
+            self.assertIn(label, markup, f"{label} is not offered")
+        # The language you are already reading is shown, not offered as a link.
+        self.assertIn('<span class="lang-current">English</span>', markup)
+        self.assertNotIn('lang=en"', markup)
+
+    def test_switching_keeps_you_on_the_page_you_were_reading(self):
+        """Changing language must not also change the day you were looking at."""
+        target = (local_date(now_utc()) + timedelta(days=10)).isoformat()
+        html = self.client.get(f"/day?date={target}&lang=en").text
+        markup = re.search(
+            r'<details class="lang-switch".*?</details>', html, re.S
+        ).group(0)
+
+        link = re.search(r'href="([^"]*lang=zh-TW[^"]*)"', markup)
+        self.assertIsNotNone(link, "no link to the other language")
+        self.assertIn(f"date={target}", link.group(1))
 
     def test_dates_are_rendered_in_the_readers_language(self):
         english = self.client.get("/day?lang=en").text

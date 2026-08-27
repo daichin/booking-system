@@ -73,11 +73,22 @@ class CatalogueParityTests(unittest.TestCase):
 
 
 class LocaleResolutionTests(unittest.TestCase):
+    def test_english_is_the_default_language(self):
+        """A deliberate product decision, not an accident of ordering.
+
+        Most use of this deployment is in English, so it is what a visitor
+        with no stated preference gets. zh-TW stays a first-class locale:
+        every string exists in both, and a member who picks it keeps it.
+        """
+        self.assertEqual(i18n.DEFAULT_LOCALE, "en")
+        self.assertEqual(i18n.AVAILABLE_LOCALES[0][0], "en")
+
     def test_regional_variants_map_onto_what_we_have(self):
         self.assertEqual(i18n.normalise("en-GB"), "en")
         self.assertEqual(i18n.normalise("zh-Hant-TW"), "zh-TW")
-        self.assertEqual(i18n.normalise("fr"), "zh-TW")
-        self.assertEqual(i18n.normalise(None), "zh-TW")
+        # Anything we do not speak, and no preference at all, get the default.
+        self.assertEqual(i18n.normalise("fr"), i18n.DEFAULT_LOCALE)
+        self.assertEqual(i18n.normalise(None), i18n.DEFAULT_LOCALE)
 
     def test_accept_language_picks_the_highest_quality_match(self):
         self.assertEqual(

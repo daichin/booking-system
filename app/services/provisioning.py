@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app import i18n
 from app.config import Config
 from app.db.base import Connection, Database
 from app.models import ACTIVE, MAX_LEVEL, new_id
@@ -71,14 +72,18 @@ def _ensure_admin(conn: Connection, config: Config) -> str:
     conn.execute(
         "INSERT INTO users (id, email, password_hash, full_name, department, phone,"
         " level, status, is_admin, must_change_password, email_verified_at,"
-        " approved_at, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " approved_at, created_at, updated_at, locale)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             user_id,
             email,
             hash_password(config.admin_initial_password),
-            "系統管理員",
-            "管理",
+            # Seeding runs from the deploy workflow, with no request and so no
+            # locale of its own: the placeholder identity and the account's
+            # own language both follow the default, which is what the first
+            # login will be rendered in. All three are editable afterwards.
+            i18n.t("seed.admin_name", locale=i18n.DEFAULT_LOCALE),
+            i18n.t("seed.admin_department", locale=i18n.DEFAULT_LOCALE),
             "-",
             MAX_LEVEL,
             ACTIVE,
@@ -88,6 +93,7 @@ def _ensure_admin(conn: Connection, config: Config) -> str:
             now,
             now,
             now,
+            i18n.DEFAULT_LOCALE,
         ),
     )
     audit.record(

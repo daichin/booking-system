@@ -27,6 +27,9 @@ STRINGS: dict[str, str] = {
     "nav.admin": "Admin console",
     "nav.home": "Home",
     "nav.skip": "Skip to main content",
+    "nav.language": "Language",
+    "seed.admin_name": "System administrator",
+    "seed.admin_department": "Administration",
     "error.page_title": "Something went wrong",
 
     # --- field names: error messages substitute these for the raw field names ---

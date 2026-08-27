@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from app import models, security
+from app import i18n, models, security
 from app.errors import (
     ACCOUNT_EXISTS,
     ACCOUNT_REJECTED,
@@ -271,8 +271,8 @@ def register(
             conn.execute(
                 "INSERT INTO users (id, email, password_hash, full_name, department,"
                 " phone, level, status, is_admin, must_change_password,"
-                " email_verified_at, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " email_verified_at, locale, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     user_id,
                     address,
@@ -285,6 +285,7 @@ def register(
                     False,
                     False,
                     None,
+                    i18n.current_locale(),
                     now,
                     now,
                 ),
@@ -568,8 +569,8 @@ def accept_invitation(
         conn.execute(
             "INSERT INTO users (id, email, password_hash, full_name, department,"
             " phone, level, status, is_admin, must_change_password,"
-            " email_verified_at, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " email_verified_at, locale, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 user_id,
                 address,
@@ -582,6 +583,7 @@ def accept_invitation(
                 False,
                 False,
                 now,
+                i18n.current_locale(),
                 now,
                 now,
             ),

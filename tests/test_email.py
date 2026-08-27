@@ -1,8 +1,8 @@
 """Tests for Task 2 -- the email service (spec §9, acceptance §12 Group D).
 
 Uses :class:`app.services.transports.FakeTransport` exclusively; the Brevo
-transport is exercised with the network layer mocked out (this machine has
-no outbound network and the transport must never be called for real here).
+transport is exercised with the network layer mocked out, so no test ever
+sends a real message or needs a provider account.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import urllib.error
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from app import models
+from app import i18n, models
 from app.services import email_templates, mailer
 from app.services.transports import BrevoTransport, FakeTransport, Message
 from app.timeutil import now_utc
@@ -22,6 +22,16 @@ _ALL_KINDS = [
     "E1", "E1_EXISTS", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
 ]
 _KINDS_WITH_TIME = {"E4", "E5", "E6", "E10"}
+
+#: The footer line and the timezone label, per locale. Every template must
+#: carry the footer, and every template that states a time must label the
+#: timezone -- a cross-cutting rule, so it is checked in both languages
+#: rather than in whichever one happens to be ambient. Pinning these to the
+#: default locale alone would have let a missing zh-TW string ship.
+_MARKERS = {
+    "en": ("automated notification", "Taipei time"),
+    "zh-TW": ("自動發送", "台北時間"),
+}
 
 
 def _sample_context(kind: str) -> dict:
@@ -84,21 +94,28 @@ def _sample_context(kind: str) -> dict:
 class EmailTemplateTests(unittest.TestCase):
     """Pure rendering checks -- no database needed."""
 
+    def setUp(self) -> None:
+        ambient = i18n.current_locale()
+        self.addCleanup(i18n.set_locale, ambient)
+
     def test_every_catalogue_kind_renders_with_both_parts(self) -> None:
-        for kind in _ALL_KINDS:
-            with self.subTest(kind=kind):
-                rendered = email_templates.render(kind, _sample_context(kind))
-                self.assertTrue(rendered.subject.strip())
-                self.assertTrue(rendered.text.strip())
-                self.assertTrue(rendered.html.strip())
-                self.assertIn("<html", rendered.html.lower())
-                self.assertIn("自動發送", rendered.text)  # footer present
-                if kind in _KINDS_WITH_TIME:
-                    self.assertIn("台北時間", rendered.text)
-                    self.assertIn("台北時間", rendered.html)
+        for locale, (footer, timezone) in _MARKERS.items():
+            i18n.set_locale(locale)
+            for kind in _ALL_KINDS:
+                with self.subTest(locale=locale, kind=kind):
+                    rendered = email_templates.render(kind, _sample_context(kind))
+                    self.assertTrue(rendered.subject.strip())
+                    self.assertTrue(rendered.text.strip())
+                    self.assertTrue(rendered.html.strip())
+                    self.assertIn("<html", rendered.html.lower())
+                    self.assertIn(footer, rendered.text)
+                    if kind in _KINDS_WITH_TIME:
+                        self.assertIn(timezone, rendered.text)
+                        self.assertIn(timezone, rendered.html)
 
     def test_e5_preemption_never_names_the_preempting_member(self) -> None:
         """Spec §7.1 / §12 C11: E5 must not disclose who preempted the victim."""
+        i18n.set_locale("zh-TW")
         context = _sample_context("E5")
         rendered = email_templates.render("E5", context)
 
@@ -114,12 +131,15 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertIn("https://example.onrender.com/day", rendered.text)
 
     def test_e5_admin_and_room_reasons_also_render(self) -> None:
-        for reason in (email_templates.E5_ADMIN, email_templates.E5_ROOM):
-            context = _sample_context("E5")
-            context["reason"] = reason
-            rendered = email_templates.render("E5", context)
-            self.assertTrue(rendered.subject.strip())
-            self.assertIn("台北時間", rendered.text)
+        for locale, (_footer, timezone) in _MARKERS.items():
+            i18n.set_locale(locale)
+            for reason in (email_templates.E5_ADMIN, email_templates.E5_ROOM):
+                with self.subTest(locale=locale, reason=reason):
+                    context = _sample_context("E5")
+                    context["reason"] = reason
+                    rendered = email_templates.render("E5", context)
+                    self.assertTrue(rendered.subject.strip())
+                    self.assertIn(timezone, rendered.text)
 
 
 class MailerTests(AppTestCase):

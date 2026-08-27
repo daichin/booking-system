@@ -78,5 +78,11 @@ class EmailLocaleTests(AppTestCase):
         self.assertEqual(i18n.current_locale(), "zh-TW")
 
     def test_an_unknown_address_falls_back_to_the_default(self):
+        """No member row means no stated preference, so: the default.
+
+        Asserted against the English label rather than the constant because
+        the point is that a real, readable email still goes out.
+        """
+        self.assertEqual(i18n.DEFAULT_LOCALE, "en")
         body = self._send_to("nobody@example.com")
-        self.assertIn("台北時間", body)
+        self.assertIn("Taipei time", body)

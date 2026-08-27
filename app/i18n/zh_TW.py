@@ -31,6 +31,9 @@ STRINGS: dict[str, str] = {
     "nav.admin": "管理後台",
     "nav.home": "回首頁",
     "nav.skip": "跳到主要內容",
+    "nav.language": "語言",
+    "seed.admin_name": "系統管理員",
+    "seed.admin_department": "管理",
     "error.page_title": "發生問題",
 
     # --- 欄位名稱：錯誤訊息把機器欄位名換成這些字 -----------------------------

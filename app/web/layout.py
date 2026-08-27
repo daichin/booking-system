@@ -15,7 +15,7 @@ from app.web.enhance import SCRIPT
 from app.web.framework import CSRF_COOKIE, CSRF_FIELD, Request
 from app.web.html import Markup, a, div, esc, footer, form, h1, hidden, join, li
 from app.web.html import main as main_el
-from app.web.html import nav, p, raw, span, ul
+from app.web.html import details, nav, p, raw, span, summary, ul
 
 STYLESHEET = """
 :root {
@@ -48,6 +48,36 @@ a { color: var(--accent); }
 .spacer { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
 .account-name { color: var(--muted); font-size: 0.9rem; max-width: 8em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Language switcher: a globe that opens a two-item menu. The text of a
+   language name varies wildly in width ("English" vs "中文"), and a header
+   that has to fit a member's name, a log-out button and the nav has no width
+   to spare -- an icon costs the same in every language. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.lang-switch { position: relative; flex: 0 0 auto; }
+.lang-switch > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  justify-content: center; width: 2.4rem; height: 2.4rem; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+}
+.lang-switch > summary::-webkit-details-marker { display: none; }
+.lang-switch > summary:hover { color: var(--ink); border-color: var(--accent); }
+.lang-switch[open] > summary { color: var(--accent); border-color: var(--accent); }
+.lang-list {
+  list-style: none; margin: 0.35rem 0 0; padding: 0.3rem;
+  position: absolute; inset-inline-end: 0; z-index: 20; min-width: 9rem;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 6px 20px rgba(28, 36, 48, 0.14);
+}
+.lang-list a, .lang-list .lang-current {
+  display: block; padding: 0.45rem 0.7rem; border-radius: 6px;
+  text-decoration: none; color: var(--ink); white-space: nowrap;
+}
+.lang-list a:hover { background: var(--mine); }
+.lang-list .lang-current { background: var(--mine); font-weight: 700; }
 
 /* On a phone the header had four groups and wrapped to four rows, eating the
    screen before any content appeared. Below 640px the title and the member's
@@ -270,25 +300,53 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 """
 
 
-def _language_links(request: Request) -> Markup:
-    """Switch language without losing the page you are on.
+#: A globe, drawn inline. An emoji would render differently on every
+#: platform and cannot be sized or coloured reliably; an external icon file
+#: would be blocked by the page's Content-Security-Policy.
+GLOBE_SVG = (
+    '<svg class="globe" viewBox="0 0 24 24" width="20" height="20" '
+    'fill="none" stroke="currentColor" stroke-width="1.8" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<circle cx="12" cy="12" r="9"/>'
+    '<path d="M3 12h18"/>'
+    '<path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/>'
+    "</svg>"
+)
 
-    Rendered as plain links carrying ``?lang=``, so it works with no
-    JavaScript and can be bookmarked.
+
+def _language_links(request: Request) -> Markup:
+    """Language switcher: a globe that opens a short menu.
+
+    A <details> rather than a button and a script, so it works with no
+    JavaScript -- the same mechanism as the jump lists. Each option is a
+    plain link carrying ?lang=, so it can be bookmarked and keeps you on the
+    page you were reading.
     """
     from urllib.parse import urlencode
 
     from app.i18n import AVAILABLE_LOCALES
 
-    links = []
+    options = []
     for code, label in AVAILABLE_LOCALES:
         if code == request.locale:
-            links.append(span(label, class_="lang-current"))
+            options.append(li(span(label, class_="lang-current")))
             continue
         query = {k: v for k, v in request.query.items() if k != "lang"}
         query["lang"] = code
-        links.append(a(label, href=f"{request.path}?{urlencode(query)}", rel="nofollow"))
-    return div(*links, class_="lang-switch")
+        options.append(
+            li(a(label, href=f"{request.path}?{urlencode(query)}", rel="nofollow"))
+        )
+
+    return details(
+        summary(
+            raw(GLOBE_SVG),
+            span(t("nav.language"), class_="visually-hidden"),
+            aria_label=t("nav.language"),
+            title=t("nav.language"),
+        ),
+        ul(*options, class_="lang-list"),
+        class_="lang-switch",
+    )
 
 
 def _nav_items(request: Request) -> list[tuple[str, str]]:

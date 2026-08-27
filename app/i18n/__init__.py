@@ -16,12 +16,15 @@ from typing import Any
 
 from app.i18n import zh_TW
 
-DEFAULT_LOCALE = "zh-TW"
+#: English is the primary language: most use of this deployment is in
+#: English, so it is what an unrecognised visitor gets. zh-TW remains a
+#: first-class locale and every string exists in both.
+DEFAULT_LOCALE = "en"
 
-#: Locales offered in the language switcher, in display order.
+#: Offered in the language switcher, in display order.
 AVAILABLE_LOCALES: tuple[tuple[str, str], ...] = (
-    ("zh-TW", "中文"),
     ("en", "English"),
+    ("zh-TW", "中文"),
 )
 
 SUPPORTED = tuple(code for code, _ in AVAILABLE_LOCALES)
