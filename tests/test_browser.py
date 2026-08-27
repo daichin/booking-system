@@ -429,3 +429,133 @@ class AdminLevelChangeBrowserTests(BrowserTestCase):
             "SELECT level FROM users WHERE id = ?", (self.user.id,)
         )
         self.assertEqual(int(levels[0]["level"]), 7)
+
+
+#: Measures the page the way a reader experiences it. Returns the page's own
+#: horizontal overflow, how many rows the header actually occupies, and every
+#: element painting content wider than the box it sits in.
+_LAYOUT_PROBE = """
+() => {
+  const out = {overflow: document.documentElement.scrollWidth - window.innerWidth,
+               headerRows: 0, offenders: []};
+
+  const bar = document.querySelector('.site-header .bar');
+  if (bar) {
+    // Rows are counted by vertical overlap, not by an identical `top`: two
+    // controls of different heights share a row with different tops, which
+    // reported three rows for a header that plainly had two.
+    const boxes = Array.from(bar.children)
+      .map(c => c.getBoundingClientRect())
+      .filter(r => r.width > 0 && r.height > 0)
+      .sort((a, b) => a.top - b.top);
+    const rows = [];
+    for (const r of boxes) {
+      const row = rows.find(x => r.top < x.bottom - 2 && r.bottom > x.top + 2);
+      if (row) {
+        row.top = Math.min(row.top, r.top);
+        row.bottom = Math.max(row.bottom, r.bottom);
+      } else {
+        rows.push({top: r.top, bottom: r.bottom});
+      }
+    }
+    out.headerRows = rows.length;
+  }
+
+  // Wide tables, the mobile nav and the jump lists scroll on purpose.
+  const SCROLLERS = ['.table-wrap', '.site-nav', '.jump-list', '.slot-list'];
+  for (const el of document.querySelectorAll('body *')) {
+    if (SCROLLERS.some(s => el.matches(s) || el.closest(s))) continue;
+    const cs = getComputedStyle(el);
+    if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
+    if (cs.display === 'none' || cs.position === 'absolute') continue;
+    if (el.clientWidth <= 0) continue;
+    const over = el.scrollWidth - el.clientWidth;
+    if (over > 1) {
+      out.offenders.push({
+        what: el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim(),
+        over: over,
+        text: (el.textContent || '').trim().slice(0, 50),
+      });
+    }
+  }
+  return out;
+}
+"""
+
+#: Phone, large phone, tablet, small laptop, desktop.
+_WIDTHS = [(360, 740), (390, 844), (768, 1024), (1024, 768), (1400, 900)]
+
+_AUDITED_PAGES = [
+    "/day", "/week", "/my",
+    "/admin/members", "/admin/rooms", "/admin/settings",
+]
+
+
+class ResponsiveLayoutTests(BrowserTestCase):
+    """Nothing may be crowded out, in either language, at any width.
+
+    English strings are typically two to three times the width of their
+    zh-TW equivalents, so a header or a form row that fits in Chinese can
+    still shove a control off the edge in English. Two defects were found
+    exactly this way and neither was visible in the markup: a checkbox
+    inheriting `width: 100%` from the shared input rule, which stretched
+    into a full-width bar and pushed its own label out; and a member's name
+    capped at 8em, which truncated an ordinary English name on a 1400px
+    screen. Both are asserted here rather than described in a comment.
+    """
+
+    #: A name long enough to crowd the header if nothing holds it back.
+    admin_name = "Alexandra Featherstonehaugh"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = self.create_user(
+            email="admin@example.com",
+            password=_PASSWORD,
+            is_admin=True,
+            full_name=self.admin_name,
+            department="Engineering",
+        )
+
+    def _audit(self, locale: str) -> None:
+        self.page.goto(f"{self.base}/login")
+        self.page.fill('input[name="email"]', "admin@example.com")
+        self.page.fill('input[name="password"]', _PASSWORD)
+        self.page.click('button[type="submit"]')
+        self.page.wait_for_url("**/day**")
+        # After logging in, so the choice is stored against this account
+        # rather than overwritten by the account's own saved language.
+        self.page.goto(f"{self.base}/day?lang={locale}")
+
+        for width, height in _WIDTHS:
+            self.page.set_viewport_size({"width": width, "height": height})
+            for path in _AUDITED_PAGES:
+                self.page.goto(f"{self.base}{path}")
+                result = self.page.evaluate(_LAYOUT_PROBE)
+                where = f"{locale} {width}px {path}"
+
+                with self.subTest(page=where, check="page overflow"):
+                    self.assertLessEqual(
+                        result["overflow"], 0,
+                        f"{where}: the page scrolls sideways by "
+                        f"{result['overflow']}px",
+                    )
+                with self.subTest(page=where, check="header rows"):
+                    if width <= 640:
+                        self.assertLessEqual(
+                            result["headerRows"], 2,
+                            f"{where}: the header takes "
+                            f"{result['headerRows']} rows on a phone",
+                        )
+                with self.subTest(page=where, check="crowded out"):
+                    self.assertEqual(
+                        result["offenders"], [],
+                        f"{where}: content wider than its box: "
+                        f"{result['offenders']}",
+                    )
+
+    def test_english_at_every_width(self):
+        self._audit("en")
+
+    def test_chinese_at_every_width(self):
+        self._audit("zh-TW")

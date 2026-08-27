@@ -21,12 +21,12 @@ from app.timeutil import now_utc
 #: system immediately. Only seeded when the room table is completely empty, so
 #: an admin who deletes them does not get them back on the next deploy.
 EXAMPLE_ROOMS = (
-    {"name": "第一會議室", "capacity": 12, "location": "3 樓",
-     "equipment_note": "投影機、白板"},
-    {"name": "第二會議室", "capacity": 6, "location": "3 樓",
-     "equipment_note": "電視螢幕"},
-    {"name": "大型會議室", "capacity": 30, "location": "5 樓",
-     "equipment_note": "投影機、視訊設備、白板"},
+    {"name": "Meeting Room 1", "capacity": 12, "location": "3F",
+     "equipment_note": "Projector, whiteboard"},
+    {"name": "Meeting Room 2", "capacity": 6, "location": "3F",
+     "equipment_note": "TV screen"},
+    {"name": "Large Conference Room", "capacity": 30, "location": "5F",
+     "equipment_note": "Projector, video conferencing, whiteboard"},
 )
 
 

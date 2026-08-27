@@ -1304,7 +1304,7 @@ def _setting_field(settings: Settings, key: str) -> html.Markup:
             type="checkbox", name=key, id=f"f-{key}", checked=bool(value) or None
         )
         row = html.div(
-            html.label(control, " ", label),
+            html.label(control, html.span(label), class_="check"),
             html.small(help_text, class_="help"),
             class_="field",
         )

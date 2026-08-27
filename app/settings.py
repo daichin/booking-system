@@ -40,8 +40,13 @@ DEFAULTS: dict[str, Any] = {
     "daily_email_cap": 280,
     # Not a business rule from §5, but the same reasoning applies: which
     # meeting titles are common differs per organisation, so it belongs in
-    # the admin-editable settings rather than in the code.
-    "title_presets": ["部門會議", "週會", "專案討論", "面試", "客戶來訪", "一對一"],
+    # the admin-editable settings rather than in the code. Shipped in the
+    # default language; an admin editing them is the expected first step,
+    # and once seeded the stored value is what everyone sees.
+    "title_presets": [
+        "Team meeting", "Weekly sync", "Project discussion",
+        "Interview", "Client visit", "One-on-one",
+    ],
 }
 
 #: Validation rules applied whenever an admin edits a setting.

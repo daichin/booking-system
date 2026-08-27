@@ -46,8 +46,15 @@ a { color: var(--accent); }
 .site-nav a { text-decoration: none; padding: 0.35rem 0.6rem; border-radius: 6px; display: block; }
 .site-nav a[aria-current="page"] { background: var(--mine); font-weight: 600; }
 .spacer { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+/* The ellipsis is the safety net that stops a long name pushing the
+   log-out button and the globe off the row -- but 8em is about eight Latin
+   characters, so an English name was clipped on a 1400px screen with room
+   to spare. The cap grows with the viewport; the title attribute keeps the
+   full name reachable whenever it does truncate. */
 .account-name { color: var(--muted); font-size: 0.9rem; max-width: 8em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 768px) { .account-name { max-width: 14em; } }
+@media (min-width: 1100px) { .account-name { max-width: 22em; } }
 
 /* Language switcher: a globe that opens a two-item menu. The text of a
    language name varies wildly in width ("English" vs "中文"), and a header
@@ -116,6 +123,13 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
   outline: 3px solid #bcd3fb; outline-offset: 1px; border-color: var(--accent);
 }
 input[readonly] { background: #f1f3f5; color: var(--muted); }
+/* A checkbox is not a text field. The shared `width: 100%` above stretched
+   it into a full-width bar and shoved its own label text out of the row. */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; flex: 0 0 auto; margin: 0; padding: 0;
+  accent-color: var(--accent);
+}
+label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
 .help { color: var(--muted); display: block; margin-top: 0.2rem; }
 button, .btn {
   font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px;
@@ -384,7 +398,7 @@ def page(
 
     if user is not None:
         account = div(
-            span(f"{user.full_name}", class_="account-name"),
+            span(user.full_name, class_="account-name", title=user.full_name),
             form(
                 hidden(CSRF_FIELD, request.cookies.get(CSRF_COOKIE, "")),
                 Markup('<button class="secondary" type="submit">')
