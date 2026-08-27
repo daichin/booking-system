@@ -374,3 +374,58 @@ class InPlaceNavigationBrowserTests(BrowserTestCase):
         self.page.click('.site-nav a[href="/week"]')
         self.page.wait_for_url("**/week")
         self.assertTrue(self.page.url.endswith("/week"))
+
+
+class AdminLevelChangeBrowserTests(BrowserTestCase):
+    """Changing a member's level, through a real form submission.
+
+    The in-process client posts a dict, so it can only ever send one value per
+    name -- which is exactly why it could not reproduce this. A browser sends
+    both fields when two share a name, and the empty one won.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = self.create_user(
+            email="admin@example.com", password=_PASSWORD, is_admin=True, level=10
+        )
+
+    def login_as_admin(self) -> None:
+        self.page.goto(f"{self.base}/login")
+        self.page.fill('input[name="email"]', "admin@example.com")
+        self.page.fill('input[name="password"]', _PASSWORD)
+        self.page.click('button[type="submit"]')
+        self.page.wait_for_url("**/day**")
+
+    def test_the_form_does_not_submit_two_fields_of_the_same_name(self):
+        self.login_as_admin()
+        self.page.goto(f"{self.base}/admin/members")
+        submitted = self.page.evaluate(
+            """() => {
+                var form = document.querySelector('form[action$="/level"]');
+                return Array.from(new FormData(form).keys());
+            }"""
+        )
+        self.assertEqual(
+            len(submitted), len(set(submitted)), f"duplicate field names: {submitted}"
+        )
+
+    def test_choosing_a_level_actually_changes_it(self):
+        self.login_as_admin()
+        self.page.goto(f"{self.base}/admin/members")
+
+        # Target this member's row explicitly: the list is sorted, so .first
+        # is whichever account happens to sort earliest -- the test would
+        # otherwise change the admin's level and report the member unchanged.
+        row = self.page.locator(
+            f'form[action="/admin/members/{self.user.id}/level"]'
+        )
+        row.locator("select").select_option("7")
+        row.locator('button[type="submit"]').click()
+        self.page.wait_for_load_state()
+
+        self.assertNotIn("err=", self.page.url, "the level change was refused")
+        levels = self.query_all(
+            "SELECT level FROM users WHERE id = ?", (self.user.id,)
+        )
+        self.assertEqual(int(levels[0]["level"]), 7)

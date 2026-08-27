@@ -163,3 +163,63 @@ class FirstVisitTests(AppTestCase):
             "/login", form={"email": "first@example.com", "password": _PASSWORD}
         )
         self.assertNotEqual(response.status, 403)
+
+
+_FIELD = re.compile(r'<(?:input|select|textarea)[^>]*\bname="([^"]+)"')
+
+
+class DuplicateFieldTests(AppTestCase):
+    """No form may submit two fields of the same name.
+
+    The browser sends both, and the parser keeps the first. That is how
+    changing a member's level came to fail every time: the row carried a
+    hidden "level" filter, the select was also called "level", and the empty
+    filter won. Nothing errored -- the wrong value was simply used.
+
+    Checked across every page rather than for that one form, because the
+    mistake is invisible in the markup and easy to repeat.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.app = create_app(
+            self.db, Config(base_url="http://testserver", email_transport="fake")
+        )
+        self.client = Client(self.app)
+        self.room = self.create_room(name="會議室 A")
+        self.member = self.create_user(email="member@example.com", password=_PASSWORD)
+
+    def _login(self, *, admin: bool) -> None:
+        email = "admin@example.com" if admin else "member@example.com"
+        if admin:
+            self.create_user(email=email, password=_PASSWORD, is_admin=True)
+        self.client.get("/login")
+        self.client.post("/login", form={"email": email, "password": _PASSWORD})
+
+    def _assert_no_duplicates(self, paths: list[str]) -> None:
+        checked = 0
+        for path in paths:
+            response = self.client.get(path)
+            self.assertEqual(response.status, 200, f"{path} did not render")
+            for attrs, body in post_forms(response.text):
+                action = re.search(r'action="([^"]*)"', attrs)
+                where = f"{path} -> {action.group(1) if action else '(self)'}"
+                names = _FIELD.findall(body)
+                repeated = sorted({n for n in names if names.count(n) > 1})
+                with self.subTest(form=where):
+                    self.assertEqual(
+                        repeated, [], f"{where} submits {repeated} more than once"
+                    )
+                checked += 1
+        self.assertGreater(checked, 0, "no forms were checked")
+
+    def test_member_pages(self):
+        self._login(admin=False)
+        self._assert_no_duplicates(["/day", "/week", "/my"])
+
+    def test_admin_pages(self):
+        self._login(admin=True)
+        self._assert_no_duplicates(ADMIN_PAGES)
+
+    def test_anonymous_pages(self):
+        self._assert_no_duplicates(ANONYMOUS_PAGES)

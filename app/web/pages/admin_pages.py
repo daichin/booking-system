@@ -469,7 +469,12 @@ def _members_list(request: Request) -> Response:
                     )
                     for level_num in range(models.MIN_LEVEL, models.MAX_LEVEL + 1)
                 ],
-                name="level",
+                # Deliberately not "level": the row carries a hidden "level"
+                # filter so the list keeps its filtering after the redirect,
+                # and two fields of the same name made the browser submit
+                # both. The parser keeps the first, which was the empty
+                # filter, so every level change failed as out of range.
+                name="new_level",
             )
             level_form = html.form(
                 _csrf(request),
@@ -548,7 +553,7 @@ def _members_redirect(request: Request, **extra: str) -> Response:
 def _members_set_level(request: Request) -> Response:
     actor = _guard(request)
     try:
-        level = int(request.form.get("level", ""))
+        level = int(request.form.get("new_level", ""))
         accounts.set_level(request.db, actor, request.params["user_id"], level)
     except (ValueError, AppError) as exc:
         code = exc.code if isinstance(exc, AppError) else "INVALID_LEVEL"
