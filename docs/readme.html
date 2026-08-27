@@ -192,6 +192,7 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
       <li><a href="#what">這套系統在做什麼</a></li>
       <li><a href="#roles">誰可以做什麼</a></li>
       <li><a href="#lifecycle">帳號的一生</a></li>
+      <li><a href="#account">我的帳號</a></li>
       <li><a href="#booking">預約規則</a></li>
       <li><a href="#preemption">覆蓋機制</a></li>
       <li><a href="#overlap">為什麼整筆取消</a></li>
@@ -229,6 +230,8 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
             <tr><td>覆蓋較低等級的預約</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
             <tr><td>審核註冊、發送邀請</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
             <tr><td>調整成員等級</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>刪除自己的帳號</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>刪除別人的帳號</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
             <tr><td>管理會議室與系統設定</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
             <tr><td>查看覆蓋紀錄</td><td class="no">—</td><td class="no">—</td><td class="yes">僅自己</td><td class="yes">全部</td></tr>
           </tbody>
@@ -245,7 +248,7 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
       <p class="lede">有兩條路可以成為正式成員。自行註冊要經過驗證與審核；由管理員發出邀請則一步到位。</p>
 
       <figure>
-        <svg viewBox="0 0 880 330" role="img" aria-label="自行註冊需經過信箱驗證與管理員審核；邀請連結則直接成為正式成員；正式成員可被停權與復權">
+        <svg viewBox="0 0 880 356" role="img" aria-label="自行註冊需經過信箱驗證與管理員審核；邀請連結則直接成為正式成員；正式成員可被停權與復權，也可以被刪除">
           <defs>
             <marker id="l-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -305,7 +308,15 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
             <text x="641" y="152" text-anchor="middle">復權</text>
           </g>
 
+          <!-- deleted -->
+          <rect x="680" y="204" width="150" height="60" rx="9" fill="none" stroke="#A32D22" stroke-width="2"/>
+          <text x="755" y="230" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="13.5" font-weight="700" fill="#A32D22">已刪除</text>
+          <text x="755" y="250" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor" opacity=".75">無法復原</text>
+          <path d="M583,146 V190 H755 V198" fill="none" stroke="#A32D22" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#l-ah-d)"/>
+          <text x="669" y="182" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11" fill="currentColor">本人或管理員刪除</text>
+
           <text x="440" y="300" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor" opacity=".8">停權不會自動取消該成員既有的預約，需要管理員另外處理</text>
+          <text x="440" y="322" text-anchor="middle" font-family="Noto Sans TC, sans-serif" font-size="11.5" fill="currentColor" opacity=".8">刪除則會取消該成員未來的預約，把會議室釋放出來</text>
         </svg>
         <figcaption><b>邀請連結之所以能跳過兩道關卡，是因為它本身就證明了信箱有效。</b>能點開那封信的人，就是那個信箱的擁有者，再寄一次驗證信沒有意義；而邀請本身已經是管理員的核准動作。</figcaption>
       </figure>
@@ -313,6 +324,25 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
       <div class="note">
         <p class="note-title">註冊頁面不會告訴你某個信箱是否已經註冊過</p>
         <p>無論輸入的信箱是新的還是已存在，畫面都顯示同一句「請至信箱查收」。這是為了避免有人拿註冊頁面來試探公司裡有誰。已存在的信箱會收到一封「你已經有帳號了」的通知信。</p>
+      </div>
+    </section>
+
+    <section id="account">
+      <h2>我的帳號</h2>
+      <p class="lede">上方選單的「帳號」是每個人管理自己資料的地方：變更密碼，以及刪除帳號。</p>
+
+      <h3>介面語言</h3>
+      <p>右上角的<b>地球圖示</b>點一下會展開語言選單，可以在 English 與繁體中文之間切換。<b>預設是 English</b>；選過之後系統會記住，換裝置登入也會沿用，會議提醒信也會用同一種語言寄出。</p>
+
+      <h3>刪除帳號</h3>
+      <p>成員可以自己刪除帳號，管理員也可以刪除任何人的帳號。刪除是<b>無法復原</b>的，所以自己刪除時必須輸入一次密碼，管理員刪除別人時會先看到一頁確認畫面。</p>
+      <div class="note warn">
+        <p class="note-title">刪除帳號，但不刪除紀錄</p>
+        <p>帳號刪除後會立刻登出，<b>未來的預約會一併取消</b>，會議室馬上釋放給其他人。過去的預約、覆蓋紀錄與稽核紀錄<b>全部保留</b>，但其中的姓名、電子郵件與電話會被移除，在管理後台顯示為「已刪除的成員」。原本的電子郵件位址會被釋放，同一個人日後可以再重新註冊。</p>
+      </div>
+      <div class="note">
+        <p class="note-title">系統上最後一位管理員無法被刪除</p>
+        <p>沒有管理員的系統無法審核新成員、無法修改設定，也沒有任何畫面可以把管理員加回來。要刪除最後一位管理員，請先把管理權限給另一個人。</p>
       </div>
     </section>
 
@@ -498,7 +528,7 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
       <ul class="plain">
         <li><b>首頁</b>：待審核人數、今日寄信量與上限、提醒信最後執行時間、近期寄信失敗</li>
         <li><b>審核佇列</b>：姓名、部門、電話、信箱、申請時間，可核准或拒絕</li>
-        <li><b>成員管理</b>：搜尋、依狀態與等級篩選、調整等級、停權與復權</li>
+        <li><b>成員管理</b>：搜尋、依狀態與等級篩選、調整等級、停權與復權、刪除帳號（會先跳出確認頁）</li>
         <li><b>邀請管理</b>：批次發送、查看未使用的邀請、撤銷</li>
         <li><b>會議室</b>：新增、編輯、停用與啟用（停用時會先問你要不要一併取消既有預約）</li>
         <li><b>所有預約</b>：依會議室、成員、日期篩選，可代為取消</li>
@@ -521,11 +551,11 @@ footer{border-top:1px solid var(--line);margin-top:1rem;padding-top:1.5rem;color
         <li><b>每天 300 封信的上限</b>：以 200 人、每天約 60 筆預約估算是夠用的，但大量發送邀請時要留意。</li>
       </ul>
       <h3>這個版本沒有做的功能</h3>
-      <p>行事曆整合（ICS / Google）、週期性重複預約、報到與未到紀錄、與會者邀請、單一登入、自訂網域、繁體中文以外的語言、手機 App、候補名單、被覆蓋後的自動改期建議、單筆預約的簽核流程。</p>
+      <p>行事曆整合（ICS / Google）、週期性重複預約、報到與未到紀錄、與會者邀請、單一登入、自訂網域、英文與繁體中文以外的語言、手機 App、候補名單、被覆蓋後的自動改期建議、單筆預約的簽核流程。</p>
     </section>
 
     <footer>
-      <p>會議室預約系統 v1.0 ・ 時區 Asia/Taipei ・ 介面語言 繁體中文 ・ 安裝方式請見《會議室系統安裝手冊》</p>
+      <p>會議室預約系統 v1.0 ・ 時區 Asia/Taipei ・ 介面語言 English（預設）與繁體中文 ・ 安裝方式請見《會議室系統安裝手冊》</p>
     </footer>
   </main>
 </div>
