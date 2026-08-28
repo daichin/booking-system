@@ -469,6 +469,14 @@ _LAYOUT_PROBE = """
     if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
     if (cs.display === 'none' || cs.position === 'absolute') continue;
     if (el.clientWidth <= 0) continue;
+    // An element told to ellipsise is not being crowded out when it does --
+    // that is the affordance working, and for arbitrary-length content like a
+    // member's name it is the only correct behaviour. Counting it as a defect
+    // also made this check font-dependent: the same name fits on a machine
+    // with the CJK stack installed and overflows on a CI runner without it,
+    // so the audit passed locally and failed in CI over nothing.
+    if (cs.textOverflow === 'ellipsis'
+        && (cs.overflow === 'hidden' || cs.overflow === 'clip')) continue;
     const over = el.scrollWidth - el.clientWidth;
     if (over > 1) {
       out.offenders.push({
