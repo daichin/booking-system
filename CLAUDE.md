@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Task 0 has landed. **Read `CONTRACT.md` first** — it is the locked output of spec §11 Task 0 and fixes the stack, module ownership, service interfaces, and the HTTP contract. Do not change what it specifies without raising it.
 
-The stack: **Python 3.13, standard library only** in development and test. Production adds exactly two packages (`psycopg[binary]`, `gunicorn` — see `requirements.txt`). Neon Postgres, Render hosting, Brevo email, GitHub Actions for deploy and cron.
+The stack: **Python 3.13, standard library only** in development and test. Production adds exactly two packages (`psycopg[binary]`, `gunicorn` — see `requirements.txt`). Neon Postgres, Render hosting, Brevo email, GitHub Actions for deploy, cron-job.org for the reminder schedule.
 
 ### Commands
 
@@ -40,7 +40,7 @@ Acceptance coverage is enforced: `tests/test_acceptance.py` fails the build if a
 - **DB free tier must not expire data** — this rules out Render Postgres (90-day expiry). Idle suspension is fine; data loss is not.
 - **Deploy is a GitHub web-UI button** (`workflow_dispatch`). The owner is non-technical and may only have a phone. No local terminal in the normal path.
 - **Free platform subdomain only** (`*.vercel.app`, `*.onrender.com`). Never depend on owning a domain.
-- **Cron via GitHub Actions `schedule`** calling a secret-protected endpoint — no paid scheduler. If the host sleeps (Render), the reminder job must tolerate a ~60s cold start.
+- **Cron via cron-job.org** calling a secret-protected endpoint — no paid scheduler. Spec §2 named GitHub Actions `schedule`; the owner replaced it because GitHub's scheduler drifts under load and disables itself after 60 days without a push. cron-job.org is free with no card, but caps a request at **30 seconds**, which is shorter than Render's ~60s cold start — so a second job pings `/api/health` every 10 minutes to stop the host ever sleeping. Without it every reminder call times out, and 25 consecutive failures switch the job off automatically.
 - **Email free tier ≥300/day**; budget ~200/day for 200 users.
 - Verify every provider's current free tier at build time; the §2.1 candidate list is non-binding and dated August 2026.
 
@@ -88,11 +88,11 @@ The invitation path is deliberately shorter: clicking an admin-issued invite lin
 
 ## Email subsystem (§9)
 
-Ten templates E1–E10 behind a provider adapter interface, with a **fake transport for tests**. `email_log` backs retries (3 with backoff), the admin log, and the daily quota guard. When `daily_email_cap` is exceeded, **drop E10 reminders first** — E1, E5, E8, E9 must still send. E7 admin notices are batched to at most one digest per admin per hour. The reminder cron endpoint must be **idempotent**: a double invocation must not double-send. Known limitation to document in `SETUP.md`: GitHub Actions schedules drift under load and auto-disable after 60 days of repo inactivity, so the admin dashboard must surface "last reminder job ran at ___".
+Ten templates E1–E10 behind a provider adapter interface, with a **fake transport for tests**. `email_log` backs retries (3 with backoff), the admin log, and the daily quota guard. When `daily_email_cap` is exceeded, **drop E10 reminders first** — E1, E5, E8, E9 must still send. E7 admin notices are batched to at most one digest per admin per hour. The reminder cron endpoint must be **idempotent**: a double invocation must not double-send. Known limitation to document in `SETUP.md`: cron-job.org switches a job off after 25 consecutive failures, so the admin dashboard must surface "last reminder job ran at ___".
 
 ## Deployment deliverables (§10)
 
-`.github/workflows/deploy.yml` (`workflow_dispatch`: install → lint → test → build → migrate → deploy → smoke-test `/api/health` → print the live URL; fails loudly naming any missing secret), `.github/workflows/reminders.yml` (`*/15 * * * *`), `SETUP.md` and `ROLLBACK.md` **written in Traditional Chinese for a non-developer**, and idempotent first-run seeding (settings row, admin account from secrets, 3 example rooms).
+`.github/workflows/deploy.yml` (`workflow_dispatch`: install → lint → test → build → migrate → deploy → smoke-test `/api/health` → print the live URL; fails loudly naming any missing secret), the reminder schedule (two cron-job.org jobs, documented in `SETUP.md` because it lives outside the repository), `SETUP.md` and `ROLLBACK.md` **written in Traditional Chinese for a non-developer**, and idempotent first-run seeding (settings row, admin account from secrets, 3 example rooms).
 
 Secrets, named exactly: `DATABASE_URL`, `EMAIL_PROVIDER_API_KEY`, `EMAIL_FROM_ADDRESS`, `APP_BASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_INITIAL_PASSWORD`, `CRON_SECRET`, plus the host's deploy token.
 

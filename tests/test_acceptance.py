@@ -144,7 +144,6 @@ class DeploymentScenarioTests(unittest.TestCase):
     def test_group_e_artifacts_all_exist(self):
         for relative in (
             ".github/workflows/deploy.yml",
-            ".github/workflows/reminders.yml",
             "SETUP.md",
             "ROLLBACK.md",
             "manage.py",

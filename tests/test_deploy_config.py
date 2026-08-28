@@ -35,10 +35,22 @@ def read(path: Path) -> str:
 
 
 class WorkflowFilesTests(unittest.TestCase):
-    def test_all_three_workflows_exist(self):
-        for name in ("deploy.yml", "reminders.yml", "ci.yml"):
+    def test_the_workflows_exist(self):
+        for name in ("deploy.yml", "ci.yml", "reset.yml"):
             with self.subTest(workflow=name):
                 self.assertTrue((WORKFLOWS / name).is_file(), f"missing {name}")
+
+    def test_nothing_here_runs_on_a_schedule_any_more(self):
+        """Reminders moved to cron-job.org.
+
+        GitHub's scheduler was the wrong tool: it drifts under load and
+        disables itself after 60 days without a push, silently taking the
+        reminder mail with it. A workflow that reintroduced a schedule would
+        mean two schedulers hitting the same endpoint.
+        """
+        for path in WORKFLOWS.glob("*.yml"):
+            with self.subTest(workflow=path.name):
+                self.assertNotIn("schedule:", read(path), f"{path.name} schedules itself")
 
 
 class DeployWorkflowTests(unittest.TestCase):
@@ -96,21 +108,26 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("APP_BASE_URL", self.text)
 
 
-class ReminderWorkflowTests(unittest.TestCase):
+class ReminderSchedulingTests(unittest.TestCase):
+    """The schedule now lives outside the repository, so the setup guide is
+    the only thing that can carry it. If it stops describing the job, nobody
+    can recreate it after a reset -- and reminders fail silently."""
+
     def setUp(self) -> None:
-        self.text = read(WORKFLOWS / "reminders.yml")
+        self.text = read(ROOT / "SETUP.md")
 
-    def test_it_runs_every_fifteen_minutes(self):
-        self.assertIn("*/15 * * * *", self.text)
-
-    def test_it_calls_the_protected_endpoint_with_the_shared_secret(self):
+    def test_the_guide_names_the_endpoint_and_its_header(self):
         self.assertIn("/api/cron/send-reminders", self.text)
         self.assertIn("X-Cron-Secret", self.text)
-        self.assertIn("secrets.CRON_SECRET", self.text)
+        self.assertIn("cron-job.org", self.text)
 
-    def test_it_tolerates_a_sixty_second_cold_start(self):
-        self.assertIn("--max-time", self.text)
-        self.assertIn("--retry", self.text)
+    def test_the_guide_sets_up_the_keep_alive_job_too(self):
+        """Without it every call cold-starts, and a cold start outlives
+        cron-job.org's 30-second timeout."""
+        self.assertIn("/api/health", self.text)
+
+    def test_the_guide_warns_that_the_job_disables_itself_after_failures(self):
+        self.assertIn("25", self.text)
 
 
 class CiWorkflowTests(unittest.TestCase):

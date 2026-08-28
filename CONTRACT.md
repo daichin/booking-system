@@ -15,7 +15,7 @@ Nothing here may be changed unilaterally; raise it to the orchestrator.
 | Database | **Neon Postgres** (prod) / **SQLite** (dev+test) | C1, C6 — Neon's free tier is permanent, 0.5 GB, no card, **data never expires**; unlike Render Postgres which expires at 90 days |
 | Hosting | **Render** free web service | C1, C3, C4 — free, no card, `*.onrender.com` subdomain, deploys from a GitHub Actions step. Sleeps after 15 min idle with ~60 s cold start, which §2.1 explicitly tolerates |
 | Email | **Brevo** transactional API | C5 — 300 emails/day, full API access, no card, no time limit |
-| Cron | **GitHub Actions `schedule`** → `POST /api/cron/send-reminders` | C7 — no paid scheduler |
+| Cron | **cron-job.org** → `POST /api/cron/send-reminders`, plus a keep-alive `GET /api/health` every 10 min | C7 — free, no card. Replaces spec §2's GitHub `schedule` (owner's decision). Its 30 s request cap is shorter than Render's ~60 s cold start, which is what the keep-alive job is for |
 | Deploy | **GitHub Actions `workflow_dispatch`** → Render deploy hook | C3 — one button in the GitHub web UI |
 | Timezone / language | UTC storage, `Asia/Taipei` display, zh-TW | C8 |
 
@@ -72,7 +72,7 @@ tests/
   test_rooms.py  test_bookings.py                                  [Task 3]
   test_preemption.py                                               [Task 4]
   test_acceptance.py                                               [Task 8]
-.github/workflows/  deploy.yml  reminders.yml  ci.yml              [Task 7]
+.github/workflows/  deploy.yml  ci.yml  reset.yml                  [Task 7]
 SETUP.md  ROLLBACK.md                                              [Task 7]
 ```
 
