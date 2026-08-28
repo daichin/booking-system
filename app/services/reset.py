@@ -84,6 +84,7 @@ ALL_TABLES = (
     "login_attempts",
     "cron_runs",
     "bookings",
+    "room_closures",
     "email_tokens",
     "sessions",
     "settings",
@@ -100,8 +101,10 @@ _HISTORY = frozenset(
 #: Who can get in.
 _IDENTITY = frozenset({"email_tokens", "sessions", "users"})
 
-#: How the site is configured.
-_CONFIGURATION = frozenset({"settings", "rooms"})
+#: How the site is configured. Closures belong here rather than with the
+#: history: "this room is shut on Tuesday mornings" is a setting, not a record
+#: of something that happened.
+_CONFIGURATION = frozenset({"settings", "rooms", "room_closures"})
 
 SCOPE_TABLES: dict[str, frozenset[str]] = {
     SCOPE_BOOKINGS: _HISTORY,
@@ -147,6 +150,10 @@ def reset(db: Database, config: Config, *, scope: str) -> ResetReport:
             # users. Clearing it is the difference between this transaction
             # committing and failing on the DELETE below.
             conn.execute("UPDATE settings SET updated_by = NULL")
+        if "users" in tables and "room_closures" not in tables:
+            # Same shape, same reason: room_closures.created_by points at a
+            # user who is about to be deleted.
+            conn.execute("UPDATE room_closures SET created_by = NULL")
 
         removed: dict[str, int] = {}
         for table in ALL_TABLES:

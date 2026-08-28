@@ -245,6 +245,46 @@ _ADD_EMAIL_CONTEXT = """
 ALTER TABLE email_log ADD COLUMN context TEXT
 """
 
+# --- 005 room closures ------------------------------------------------------
+#
+# An admin closes a specific date and time range of one room, which the whole-
+# room is_active flag cannot express: "meeting room 1 is unavailable on 31 Aug
+# from 12:00 to 15:00", or "every weekday 08:00-10:00 for the next six weeks".
+#
+# Dates are TEXT 'YYYY-MM-DD' rather than DATE because app/db/base.py registers
+# SQLite converters for TIMESTAMPTZ and BOOLEAN only, so a DATE column would
+# come back as str on SQLite and datetime.date on Postgres -- exactly the row
+# shape divergence the rest of this module exists to avoid. ISO dates sort
+# lexicographically, so range comparisons still work in plain SQL on both.
+#
+# Times are minutes past Taipei midnight, for the same reason rooms.open_minutes
+# is. Weekdays are a 7-bit mask with Monday = bit 0, matching date.weekday();
+# the mask is evaluated in Python and never in SQL, because the two dialects
+# disagree on the weekday origin and because strftime's '%' would be doubled by
+# Connection._prepare on its way to Postgres.
+
+_ROOM_CLOSURES = """
+CREATE TABLE room_closures (
+    id            TEXT PRIMARY KEY,
+    room_id       TEXT NOT NULL REFERENCES rooms(id),
+    from_date     TEXT NOT NULL CHECK (from_date LIKE '____-__-__'),
+    to_date       TEXT NOT NULL CHECK (to_date LIKE '____-__-__'),
+    start_minutes INTEGER NOT NULL CHECK (start_minutes >= 0),
+    end_minutes   INTEGER NOT NULL CHECK (end_minutes <= 1440),
+    weekday_mask  INTEGER NOT NULL CHECK (weekday_mask BETWEEN 1 AND 127),
+    reason        TEXT,
+    created_by    TEXT REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL,
+    CHECK (to_date >= from_date),
+    CHECK (end_minutes > start_minutes)
+);
+
+-- Serves both hot paths: "closures for this room covering this date" (booking
+-- validation and the day grid) and "list this room's closures in order".
+CREATE INDEX ix_room_closures_lookup
+    ON room_closures (room_id, from_date, to_date);
+"""
+
 MIGRATIONS: list[Migration] = [
     Migration(
         version=1,
@@ -269,6 +309,12 @@ MIGRATIONS: list[Migration] = [
         name="email_context",
         sqlite=_ADD_EMAIL_CONTEXT,
         postgres=_ADD_EMAIL_CONTEXT,
+    ),
+    Migration(
+        version=5,
+        name="room_closures",
+        sqlite=_ROOM_CLOSURES,
+        postgres=_ROOM_CLOSURES,
     ),
 ]
 

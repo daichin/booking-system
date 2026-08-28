@@ -22,7 +22,7 @@ STYLESHEET = """
   --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2430; --muted: #5d6b7a;
   --line: #dfe4ea; --accent: #1f6feb; --accent-ink: #ffffff;
   --ok: #0f7b3f; --ok-bg: #e6f4ec; --warn: #8a5a00; --warn-bg: #fdf3df;
-  --err: #b3261e; --err-bg: #fdecea; --mine: #e8f0fe; --other: #eef1f4;
+  --err: #b3261e; --err-bg: #fdecea; --mine: #e8f0fe; --other: #eef1f4; --closed: #e7e3dd;
   --radius: 10px;
 }
 * { box-sizing: border-box; }
@@ -130,6 +130,10 @@ input[type="checkbox"], input[type="radio"] {
   accent-color: var(--accent);
 }
 label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+/* Seven day boxes. They wrap rather than overflow, which is what keeps the
+   admin form inside 360px. */
+.weekday-row { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+.weekday-row label.check { font-weight: 500; }
 
 /* Read-only account details, and the one place on the site that destroys
    something. The red border is the only warning a reader gets before the
@@ -245,6 +249,7 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 .legend span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 3px; margin-inline-end: 0.35em; vertical-align: middle; }
 .legend .k-mine::before { background: var(--mine); border: 1px solid #cbd9f2; }
 .legend .k-other::before { background: var(--other); border: 1px solid var(--line); }
+.legend .k-closed::before { background: var(--closed); border: 1px solid var(--line); }
 .legend .k-free::before { background: #fff; border: 1px solid var(--line); }
 /* Two-click slot picking. The "selecting" state must look different enough
    that it is obvious the second click means something else. */
@@ -273,6 +278,12 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
 .slot.is-start .slot-title { color: #fff; }
 .slot.is-in-range { background: var(--mine); }
 .slot.is-unreachable { opacity: 0.45; }
+/* A closure: the room exists and is open, but an admin has shut this part of
+   the day. Distinct from is-booked (someone has it) and from is-unreachable
+   (you cannot get there from where your selection began). The row also
+   carries the word, so colour is not the only signal. */
+.slot.is-closed { background: var(--closed); color: var(--muted); }
+.slot-closed { color: var(--muted); font-weight: 600; }
 .manual-entry { margin-top: 1rem; }
 .manual-entry > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
 

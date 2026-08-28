@@ -207,6 +207,7 @@ def _legend() -> Markup:
         span(t("day.legend.mine"), class_="k-mine"),
         span(t("day.legend.other"), class_="k-other"),
         span(t("day.legend.free"), class_="k-free"),
+        span(t("day.legend.closed"), class_="k-closed"),
         class_="legend",
     )
 
@@ -228,6 +229,31 @@ def _booking_at(room_day: Any, minute: int) -> dict | None:
         if start <= minute < end:
             return entry
     return None
+
+
+def _closure_at(room_day: Any, minute: int) -> Any | None:
+    """The closure shutting this slot, if any.
+
+    ``room_day.closures`` is already filtered to this day and weekday, so only
+    the minutes are left to compare.
+    """
+    for closure in room_day.closures:
+        if closure.start_minutes <= minute < closure.end_minutes:
+            return closure
+    return None
+
+
+def _first_closed_minute(room_day: Any, at_or_after: int) -> int | None:
+    """Where a selection starting at ``at_or_after`` has to stop.
+
+    The grid builds a booking two clicks at a time, so without this a member
+    who picked 09:00 would still be offered "end at 11:30" across a closure at
+    10:00, and would only learn otherwise on the confirmation page.
+    """
+    starts = [
+        c.start_minutes for c in room_day.closures if c.end_minutes > at_or_after
+    ]
+    return min(starts) if starts else None
 
 
 def _render_slots(
@@ -252,16 +278,30 @@ def _render_slots(
     selecting_here = selection is not None and selection[0] == room_day.room.id
     start_minute = selection[1] if selecting_here else None
 
+    # Admins may book over a closure (spec §6.5 step 7b), so the grid must
+    # keep offering them the slots it refuses everyone else.
+    blocked_from = (
+        None
+        if viewer.is_admin or start_minute is None
+        else _first_closed_minute(room_day, start_minute)
+    )
+
     items: list[Markup] = []
     minute = room_day.open_minutes
     while minute < room_day.close_minutes:
         slot_end = minute + slot
         booked = _booking_at(room_day, minute)
+        # A booking wins the row. An admin may have booked inside a closure,
+        # and painting that slot "Closed" would be the grid lying about a
+        # meeting that is going ahead.
+        closed = None if booked is not None else _closure_at(room_day, minute)
         time_label = f"{format_hhmm(minute)}–{format_hhmm(slot_end)}"
 
         classes = ["slot"]
         if booked is not None:
             classes.append("is-mine" if booked["user_id"] == viewer.id else "is-booked")
+        elif closed is not None:
+            classes.append("is-closed")
 
         # Both cases use the same wrapper so every row is the same height and
         # the columns stay in step; the full text lives in the title attribute
@@ -274,18 +314,35 @@ def _render_slots(
                 class_="slot-detail",
                 title=f"{booked['title']} ・ {owner_name}",
             )
+        elif closed is not None:
+            detail = div(
+                span(t("day.slot_closed"), class_="slot-closed"),
+                span(closed.reason or "", class_="slot-owner"),
+                class_="slot-detail",
+                title=closed.reason or t("day.slot_closed"),
+            )
         else:
             detail = div(
                 span(t("day.slot_free"), class_="slot-free"), class_="slot-detail"
             )
 
         action: Any = Markup("")
-        if viewer.can_book:
+        # A closed slot offers nothing to a member, and nothing beyond the
+        # first closure once a start has been picked -- a booking may not span
+        # one.
+        unreachable = not viewer.is_admin and (
+            closed is not None
+            or (blocked_from is not None and slot_end > blocked_from)
+        )
+        if unreachable and closed is None:
+            classes.append("is-unreachable")
+        if viewer.can_book and not unreachable:
             if not selecting_here:
                 action = a(
                     t("day.pick_start"),
                     href=_day_url(day, room_day.room.id, minute),
                     class_="slot-action",
+                    title=t("day.closed_admin_may_book") if closed is not None else None,
                 )
             elif minute == start_minute:
                 classes.append("is-start")
@@ -1039,6 +1096,17 @@ def api_availability(request: Request) -> Response:
                 "name": room_day.room.name,
                 "open": format_hhmm(room_day.open_minutes),
                 "close": format_hhmm(room_day.close_minutes),
+                # HH:MM like the sibling open/close fields, not an ISO instant
+                # like bookings[].start_at: a closure is a wall-clock window on
+                # the requested date, not a moment.
+                "closures": [
+                    {
+                        "start": format_hhmm(c.start_minutes),
+                        "end": format_hhmm(c.end_minutes),
+                        "reason": c.reason or "",
+                    }
+                    for c in room_day.closures
+                ],
                 "bookings": [
                     {
                         "id": entry["id"],

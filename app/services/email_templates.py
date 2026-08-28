@@ -20,7 +20,8 @@ E3              full_name
 E4              full_name, room_name, title, start_at, end_at,
                 cancel_url (optional)
 E5              full_name, room_name, title, start_at, end_at,
-                reason ("preempted" | "cancelled_by_admin" | "room_deactivated"),
+                reason ("preempted" | "cancelled_by_admin" | "room_deactivated"
+                        | "room_closed"),
                 book_url (optional).
                 MUST NOT include anything about who preempted the victim --
                 spec §7.1 / §12 C11. This module never reads such a field even
@@ -47,6 +48,9 @@ from app.timeutil import format_range
 E5_PREEMPTED = "preempted"
 E5_ADMIN = "cancelled_by_admin"
 E5_ROOM = "room_deactivated"
+#: The room still exists; the admin closed part of a day. Distinct from
+#: E5_ROOM, whose wording says the room itself was disabled.
+E5_CLOSED = "room_closed"
 
 
 @dataclass(frozen=True)
@@ -163,6 +167,7 @@ _E5_KEYS = {
     E5_PREEMPTED: "email.E5_preempted",
     E5_ADMIN: "email.E5_admin",
     E5_ROOM: "email.E5_room",
+    E5_CLOSED: "email.E5_closed",
 }
 
 
@@ -286,4 +291,7 @@ def render(kind: str, context: dict[str, Any]) -> RenderedEmail:
     return renderer(context)
 
 
-__all__ = ["RenderedEmail", "render", "E5_PREEMPTED", "E5_ADMIN", "E5_ROOM"]
+__all__ = [
+    "RenderedEmail", "render",
+    "E5_PREEMPTED", "E5_ADMIN", "E5_ROOM", "E5_CLOSED",
+]

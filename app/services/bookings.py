@@ -27,6 +27,7 @@ from app.errors import (
     OFF_GRID,
     OUTSIDE_WINDOW,
     QUOTA_EXCEEDED,
+    ROOM_CLOSED,
     ROOM_INACTIVE,
     START_IN_PAST,
     TITLE_REQUIRED,
@@ -40,7 +41,7 @@ from app.models import (
     Room,
     User,
 )
-from app.services import audit
+from app.services import audit, closures
 from app.settings import Settings
 from app.timeutil import (
     ensure_utc,
@@ -87,7 +88,8 @@ def validate_request(
     even though every individual rule is unchanged.
 
     A missing title is checked first as plain input validation; it is not one
-    of the eight numbered rules.
+    of the eight numbered rules, and neither is the room-closure check
+    (7b), which the spec does not describe.
     """
     if not (title or "").strip():
         raise AppError(TITLE_REQUIRED)
@@ -140,6 +142,40 @@ def validate_request(
             OUTSIDE_WINDOW,
             {"open_time": format_hhmm(open_at), "close_time": format_hhmm(close_at)},
         )
+
+    # 7b. an admin has closed this room for part of this day. Not one of the
+    #     eight numbered rules -- the spec is silent on closures -- but the
+    #     same kind as step 7 and placed with it: both answer "the room is not
+    #     bookable then", while step 8 answers "you have booked too much".
+    #     Reporting the quota for a slot nobody can have would be the wrong
+    #     first message and would leak that the request was otherwise fine.
+    #
+    #     It must come after the midnight check: a closure is defined against
+    #     one Taipei calendar date, so a booking spanning midnight has no
+    #     single date to test against.
+    #
+    #     start_minutes/end_minutes are reused from step 7 rather than
+    #     recomputed, which keeps the 24:00 end-of-day normalisation above.
+    if not requester.is_admin:
+        # Admins may book over a closure. That is the owner's explicit
+        # decision, and it is an exemption from a §6.5 validation rule -- not
+        # the preemption privilege CLAUDE.md rules out, which is about who
+        # wins a contested slot in §7 and still depends on level alone. The
+        # test keys on is_admin and never on level: a level-10 member is
+        # blocked here, and an admin's level buys them nothing in §7.
+        closed = closures.closure_at(
+            conn, room.id, local_date(start_at), start_minutes, end_minutes
+        )
+        if closed is not None:
+            raise AppError(
+                ROOM_CLOSED,
+                {
+                    "date": local_date(start_at).isoformat(),
+                    "start_time": format_hhmm(closed.start_minutes),
+                    "end_time": format_hhmm(closed.end_minutes),
+                    "reason": closed.reason or "",
+                },
+            )
 
     # 8. per-level quota on future confirmed bookings
     quota = settings.quota_for(requester.level)

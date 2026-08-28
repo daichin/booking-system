@@ -30,7 +30,7 @@ from app.models import (
     User,
     new_id,
 )
-from app.services import audit
+from app.services import audit, closures
 from app.settings import Settings
 from app.timeutil import (
     format_hhmm,
@@ -66,6 +66,9 @@ class RoomDay:
     open_minutes: int
     close_minutes: int
     bookings: list[dict[str, Any]] = field(default_factory=list)
+    #: Closures shutting part of this day, already filtered to it. Defaulted
+    #: so a hand-built RoomDay in a test keeps working.
+    closures: list[Any] = field(default_factory=list)
 
 
 def _require_admin(actor: User) -> None:
@@ -325,6 +328,12 @@ def delete_room(db: Database, actor: User, room_id: str) -> None:
         )
         if referencing:
             raise AppError(ROOM_HAS_BOOKINGS, {"bookings": int(referencing)})
+        # room_closures.room_id is a foreign key, and foreign keys are enforced
+        # on both backends, so leaving them would turn this into a raw
+        # integrity error rather than an AppError -- a 500 instead of a
+        # message. They are configuration for a room that is ceasing to exist
+        # and nothing references them, so they simply go.
+        closures.delete_for_room(conn, room_id)
         conn.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
 
     db.run_in_transaction(work)
@@ -372,6 +381,7 @@ def availability(
                     open_minutes=open_at,
                     close_minutes=close_at,
                     bookings=[_public_booking(row) for row in booking_rows],
+                    closures=closures.for_day(conn, room.id, day),
                 )
             )
         return result

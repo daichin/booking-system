@@ -113,6 +113,13 @@ class ResetTestBase(AppTestCase):
                 (new_id(), self.member.id, now, now + timedelta(days=7)),
             )
             conn.execute(
+                "INSERT INTO room_closures (id, room_id, from_date, to_date,"
+                " start_minutes, end_minutes, weekday_mask, reason, created_by,"
+                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (new_id(), self.room.id, "2026-01-01", "2026-12-31",
+                 8 * 60, 10 * 60, 0b1111111, "每日清潔", self.admin.id, now),
+            )
+            conn.execute(
                 "INSERT INTO login_attempts (id, email, succeeded, created_at)"
                 " VALUES (?, ?, ?, ?)",
                 (new_id(), self.member.email, True, now),

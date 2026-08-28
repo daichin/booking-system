@@ -64,12 +64,16 @@ Rules that are easy to get subtly wrong:
 - Any overlap cancels the victim's booking **in its entirety** — no splitting or trimming.
 - **All-or-nothing**: if a request overlaps several bookings and any one is non-preemptible, the whole request is rejected and nothing changes.
 - Overlapping your own booking is `BLOCKED: SELF_OVERLAP`, never a self-preemption.
-- Admin status grants no preemption privilege; only `level` matters.
+- Admin status grants no preemption privilege; only `level` matters. (Admin **is** the exemption for booking over a room closure — that is a §6.5 validation rule, not a §7 conflict, and it was the owner's explicit decision.)
 - **Two-phase UX is required.** Phase 1 returns `AVAILABLE` / `PREEMPTION_REQUIRED(victims)` / `BLOCKED(reason)`. Phase 2 commits only on explicit confirmation and **re-runs the entire check inside the transaction** — never trust the phase-1 result.
 - Concurrency: `SELECT … FOR UPDATE` on the overlap set, or `SERIALIZABLE` + retry-on-conflict. Two simultaneous attempts on the same victim must yield exactly one winner, one victim record, and one E5 email.
 - **Emails are enqueued only after commit.** Sending inside the transaction risks a "your booking was cancelled" email for a booking that a rollback preserved.
 - Preemption must cancel the victim's pending E10 reminder.
 - E5 names the room and time but **never the preempting user**; `BLOCKED` responses expose the blocker's name and department, never their email.
+
+## Room closures
+
+An admin may close a date+time range of one room (`room_closures`, migration 5) — a rule, not a list of days, so a six-week cleaning slot is one row. The spec is silent on this; §13's "recurring bookings" is a member-facing feature about repeating *reservations*, not room availability. Checked as **step 7b** of §6.5, between the open/close window and the quota: both 7 and 7b answer "the room is not bookable then", while 8 answers "you have booked too much". **Admins are exempt** (see above). Overlap is half-open and lives in one function, `closures.overlaps`, used by both booking validation and conflict detection so the two can never disagree.
 
 ## Booking validation order (§6.5)
 

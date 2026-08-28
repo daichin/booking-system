@@ -30,6 +30,7 @@ ADMIN_PAGES = [
     "/admin/members",
     "/admin/invitations",
     "/admin/rooms",
+    "/admin/closures",
     "/admin/bookings",
     "/admin/preemptions",
     "/admin/settings",

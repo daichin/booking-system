@@ -25,7 +25,7 @@ from urllib.parse import urlencode
 from app import models
 from app.errors import AppError, CONFIRMATION_REQUIRED
 from app.i18n import error_message, t
-from app.services import accounts, audit, mailer, preemption, rooms
+from app.services import accounts, audit, closures, mailer, preemption, rooms
 from app.services import bookings as bookings_service
 from app.services.mailer import enqueue as mailer_enqueue
 from app.settings import DEFAULTS as SETTINGS_DEFAULTS
@@ -73,6 +73,7 @@ _ADMIN_NAV = (
     ("/admin/members", "admin.nav.members"),
     ("/admin/invitations", "admin.nav.invitations"),
     ("/admin/rooms", "admin.nav.rooms"),
+    ("/admin/closures", "admin.nav.closures"),
     ("/admin/bookings", "admin.nav.bookings"),
     ("/admin/preemptions", "admin.nav.preemptions"),
     ("/admin/settings", "admin.nav.settings"),
@@ -1616,6 +1617,366 @@ def _emails_resend(request: Request) -> Response:
     return Response.redirect("/admin/emails?msg=email_resent")
 
 # =============================================================================
+# Room closures
+# =============================================================================
+
+
+def _closure_form_fields(request: Request) -> dict[str, Any]:
+    """Everything the create form submits, in one place.
+
+    Also what the conflict-confirmation page echoes back as hidden inputs, so
+    the second submit rebuilds exactly the rule the first one described.
+    """
+    form = request.form
+    return {
+        "room_id": form.get("room_id", ""),
+        "all_rooms": form.get("all_rooms", ""),
+        "from_date": form.get("from_date", ""),
+        "to_date": form.get("to_date", ""),
+        "start_time": form.get("start_time", ""),
+        "end_time": form.get("end_time", ""),
+        "reason": form.get("reason", ""),
+        # Seven distinct names, never seven inputs called "weekday". The form
+        # parser keeps only the first value of a repeated field, so same-named
+        # checkboxes would silently collapse to one day -- the same trap that
+        # made every level change fail. Mirrors the quota_{level} fields.
+        **{f"weekday_{i}": form.get(f"weekday_{i}", "") for i in range(7)},
+    }
+
+
+def _closure_weekdays(fields: dict[str, Any]) -> set[int]:
+    return {i for i in range(7) if fields.get(f"weekday_{i}")}
+
+
+def _closure_room_ids(request: Request, fields: dict[str, Any]) -> list[str]:
+    if fields.get("all_rooms"):
+        return [room.id for room in rooms.list_rooms(request.db, include_inactive=True)]
+    return [fields["room_id"]] if fields["room_id"] else []
+
+
+def _time_options(settings: Settings, selected: str) -> list[html.Markup]:
+    """Every slot boundary, including 24:00.
+
+    Deliberately a <select> rather than <input type="time">: parse_hhmm accepts
+    "24:00" so a room can be closed until midnight, but a time input caps at
+    23:59 and cannot express it.
+    """
+    return [
+        html.option(
+            format_hhmm(minute),
+            value=format_hhmm(minute),
+            selected=format_hhmm(minute) == selected or None,
+        )
+        for minute in range(0, 24 * 60 + 1, settings.slot_minutes)
+    ]
+
+
+def _closure_create_form(request: Request, fields: dict[str, Any] | None = None) -> html.Markup:
+    settings = request.db.run_in_transaction(Settings.load)
+    room_list = rooms.list_rooms(request.db, include_inactive=True)
+    fields = fields or {}
+    # Every weekday ticked by default: closing a stretch of days usually means
+    # all of them, and the filter is there for the times it does not.
+    chosen = _closure_weekdays(fields) or set(range(7))
+    # An empty form opens on the first bookable slot of the day rather than on
+    # 00:00-00:00, which is the one pair of times that can never validate.
+    default_start = format_hhmm(settings.default_open_minutes)
+    default_end = format_hhmm(settings.default_open_minutes + settings.slot_minutes)
+
+    weekday_boxes = [
+        html.label(
+            html.input_(
+                type="checkbox",
+                name=f"weekday_{i}",
+                id=f"weekday-{i}",
+                checked=(i in chosen) or None,
+            ),
+            html.span(t(f"admin.closures.weekday_{i}")),
+            class_="check",
+        )
+        for i in range(7)
+    ]
+
+    return html.form(
+        _csrf(request),
+        html.div(
+            html.label(t("admin.closures.field_room"), for_="c-room"),
+                html.select(
+                    *[
+                        html.option(
+                            room.name,
+                            value=room.id,
+                            selected=room.id == fields.get("room_id") or None,
+                        )
+                        for room in room_list
+                    ],
+                    name="room_id",
+                    id="c-room",
+                ),
+            html.label(
+                html.input_(
+                    type="checkbox",
+                    name="all_rooms",
+                    id="c-all-rooms",
+                    checked=bool(fields.get("all_rooms")) or None,
+                ),
+                html.span(t("admin.closures.all_rooms")),
+                class_="check",
+            ),
+            class_="field",
+        ),
+        html.div(
+            html.div(
+                html.label(t("admin.closures.field_from_date"), for_="c-from"),
+                html.input_(
+                    type="date", name="from_date", id="c-from",
+                    value=fields.get("from_date", ""),
+                ),
+                class_="field",
+            ),
+            html.div(
+                html.label(t("admin.closures.field_to_date"), for_="c-to"),
+                html.input_(
+                    type="date", name="to_date", id="c-to",
+                    value=fields.get("to_date", ""), required=False,
+                ),
+                html.small(t("admin.closures.to_date_help"), class_="help"),
+                class_="field",
+            ),
+            class_="grid-2",
+        ),
+        html.div(
+            html.div(
+                html.label(t("admin.closures.field_start_time"), for_="c-start"),
+                html.select(
+                    *_time_options(settings, fields.get("start_time") or default_start),
+                    name="start_time", id="c-start",
+                ),
+                class_="field",
+            ),
+            html.div(
+                html.label(t("admin.closures.field_end_time"), for_="c-end"),
+                html.select(
+                    *_time_options(settings, fields.get("end_time") or default_end),
+                    name="end_time", id="c-end",
+                ),
+                class_="field",
+            ),
+            class_="grid-2",
+        ),
+        html.div(
+            html.label(t("admin.closures.field_weekdays")),
+            html.div(*weekday_boxes, class_="weekday-row"),
+            class_="field",
+        ),
+        html.div(
+            html.label(t("admin.closures.field_reason"), for_="c-reason"),
+            html.input_(
+                type="text", name="reason", id="c-reason",
+                value=fields.get("reason", ""), required=False,
+                maxlength=str(closures.MAX_REASON_LENGTH),
+            ),
+            html.small(t("admin.closures.reason_help"), class_="help"),
+            class_="field",
+        ),
+        html.button(t("admin.closures.create"), type="submit"),
+        method="post",
+        action="/admin/closures",
+    )
+
+
+def _closure_dates_label(closure: Any) -> str:
+    if closure.from_date == closure.to_date:
+        return t("admin.closures.single_day", date=closure.from_date.isoformat())
+    return t(
+        "admin.closures.date_range",
+        from_date=closure.from_date.isoformat(),
+        to_date=closure.to_date.isoformat(),
+    )
+
+
+def _closure_weekdays_label(closure: Any) -> str:
+    if closure.is_every_day:
+        return t("admin.closures.every_day")
+    return "、".join(t(f"admin.closures.weekday_{d}") for d in closure.weekdays)
+
+
+def _closures_list(request: Request, extra: Any = None) -> Response:
+    _guard(request)
+    include_past = request.query.get("past") == "1"
+    entries = closures.list_closures(request.db, include_past=include_past)
+    names = {
+        room.id: room.name
+        for room in rooms.list_rooms(request.db, include_inactive=True)
+    }
+
+    if not entries:
+        table = html.p(t("admin.closures.empty"), class_="muted")
+    else:
+        table = html.div(
+            html.table(
+                html.thead(
+                    html.tr(
+                        html.th(t("admin.closures.col_room")),
+                        html.th(t("admin.closures.col_dates")),
+                        html.th(t("admin.closures.col_time")),
+                        html.th(t("admin.closures.col_weekdays")),
+                        html.th(t("admin.closures.col_reason")),
+                        html.th(t("admin.closures.col_actions")),
+                    )
+                ),
+                html.tbody(
+                    *[
+                        html.tr(
+                            html.td(names.get(c.room_id, "-")),
+                            html.td(_closure_dates_label(c)),
+                            html.td(
+                                f"{format_hhmm(c.start_minutes)}–"
+                                f"{format_hhmm(c.end_minutes)}"
+                            ),
+                            html.td(_closure_weekdays_label(c)),
+                            html.td(c.reason or "-"),
+                            html.td(
+                                html.form(
+                                    _csrf(request),
+                                    html.button(
+                                        t("admin.closures.delete"),
+                                        type="submit",
+                                        class_="danger",
+                                    ),
+                                    method="post",
+                                    action=f"/admin/closures/{c.id}/delete",
+                                    class_="inline-form",
+                                )
+                            ),
+                        )
+                        for c in entries
+                    ]
+                ),
+            ),
+            class_="table-wrap",
+        )
+
+    toggle = html.p(
+        html.a(
+            t("admin.closures.hide_past" if include_past else "admin.closures.show_past"),
+            href="/admin/closures" if include_past else "/admin/closures?past=1",
+        )
+    )
+
+    body = [
+        html.div(
+            html.h2(t("admin.closures.create_title")),
+            _closure_create_form(request),
+            class_="panel",
+        ),
+        html.div(table, toggle, class_="panel"),
+    ]
+    if extra is not None:
+        body.insert(0, extra)
+    return _shell(request, t("admin.closures.title"), *body)
+
+
+def _closures_create(request: Request) -> Response:
+    actor = _guard(request)
+    fields = _closure_form_fields(request)
+    confirmed = request.form.get("confirm_cancel") == "1"
+    room_ids = _closure_room_ids(request, fields)
+
+    try:
+        result = closures.create_closure(
+            request.db,
+            actor,
+            room_ids=room_ids,
+            from_date=fields["from_date"],
+            to_date=fields["to_date"],
+            start_time=fields["start_time"],
+            end_time=fields["end_time"],
+            weekdays=_closure_weekdays(fields),
+            reason=fields["reason"],
+            cancel_bookings=confirmed,
+        )
+    except AppError as exc:
+        if exc.code == CONFIRMATION_REQUIRED and not confirmed:
+            return _closures_conflict_page(request, fields, exc)
+        return Response.redirect(f"/admin/closures{_qs({'err': exc.code})}")
+
+    if result.emails:
+        mailer_enqueue(request.db, result.emails)
+    return Response.redirect(f"/admin/closures{_qs({'msg': 'closure_created'})}")
+
+
+def _closures_conflict_page(
+    request: Request, fields: dict[str, Any], exc: AppError
+) -> Response:
+    """Show what is in the way rather than a bare count.
+
+    The admin asked to close a range and is being told no; the useful answer
+    is which meetings, whose, and when -- enough to decide between moving the
+    closure and cancelling them.
+    """
+    conflicts = exc.details.get("bookings", [])
+    names = {
+        room.id: room.name
+        for room in rooms.list_rooms(request.db, include_inactive=True)
+    }
+    rows = [
+        html.tr(
+            html.td(names.get(entry["room_id"], "-")),
+            html.td(_fmt(entry["start_at"])),
+            html.td(entry["title"]),
+            html.td(f'{entry["owner_name"]}（{entry["owner_department"]}）'),
+        )
+        for entry in conflicts
+    ]
+    panel = html.div(
+        html.h2(t("admin.closures.confirm_title")),
+        html.p(t("admin.closures.confirm_body", count=len(conflicts))),
+        html.div(
+            html.table(
+                html.thead(
+                    html.tr(
+                        html.th(t("admin.closures.col_room")),
+                        html.th(t("admin.bookings.col_time")),
+                        html.th(t("admin.bookings.col_title")),
+                        html.th(t("admin.bookings.col_user")),
+                    )
+                ),
+                html.tbody(*rows),
+            ),
+            class_="table-wrap",
+        ),
+        html.div(
+            html.form(
+                _csrf(request),
+                # The rule the admin described has to survive the round trip,
+                # or confirming would create something subtly different.
+                *[html.hidden(k, v) for k, v in fields.items() if v],
+                html.hidden("confirm_cancel", "1"),
+                html.button(
+                    t("admin.closures.confirm_button"), type="submit", class_="danger"
+                ),
+                method="post",
+                action="/admin/closures",
+                class_="inline-form",
+            ),
+            html.a(t("common.cancel"), href="/admin/closures", class_="btn secondary"),
+            class_="actions",
+        ),
+        class_="confirm-panel",
+    )
+    return _shell(request, t("admin.closures.confirm_title"), panel)
+
+
+def _closures_delete(request: Request) -> Response:
+    actor = _guard(request)
+    try:
+        closures.delete_closure(request.db, actor, request.params["closure_id"])
+    except AppError as exc:
+        return Response.redirect(f"/admin/closures{_qs({'err': exc.code})}")
+    return Response.redirect(f"/admin/closures{_qs({'msg': 'closure_deleted'})}")
+
+# =============================================================================
 # Audit trail
 # =============================================================================
 
@@ -1726,6 +2087,10 @@ def register(router: Router) -> None:
     router.add("POST", "/admin/rooms/{room_id}", _rooms_update)
     router.add("POST", "/admin/rooms/{room_id}/deactivate", _rooms_deactivate)
     router.add("POST", "/admin/rooms/{room_id}/activate", _rooms_activate)
+
+    router.add("GET", "/admin/closures", _closures_list)
+    router.add("POST", "/admin/closures", _closures_create)
+    router.add("POST", "/admin/closures/{closure_id}/delete", _closures_delete)
 
     router.add("GET", "/admin/bookings", _bookings_list)
     router.add("POST", "/admin/bookings/{booking_id}/cancel", _bookings_cancel)

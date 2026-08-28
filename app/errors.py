@@ -66,6 +66,10 @@ START_IN_PAST = "START_IN_PAST"              # step 5
 BEYOND_HORIZON = "BEYOND_HORIZON"            # step 6
 OUTSIDE_WINDOW = "OUTSIDE_WINDOW"            # step 7: outside room open/close
 CROSSES_MIDNIGHT = "CROSSES_MIDNIGHT"        # step 7
+#: step 7b: an admin closed this room for part of this day. Declared here,
+#: between the window rule and the quota rule, so this file keeps documenting
+#: the §6.5 order it claims to.
+ROOM_CLOSED = "ROOM_CLOSED"
 QUOTA_EXCEEDED = "QUOTA_EXCEEDED"            # step 8
 TITLE_REQUIRED = "TITLE_REQUIRED"
 
