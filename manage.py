@@ -7,6 +7,7 @@ Subcommands:
     python manage.py check-secrets      # exit non-zero, naming any missing secret
     python manage.py health --url URL   # post-deploy smoke test against /api/health
     python manage.py tutorial-build     # regenerate tutorial/offline.html
+    python manage.py reset --scope S --confirm DELETE   # wipe application data
 
 Standard library only -- this script must run before `pip install -r
 requirements.txt` has necessarily happened (check-secrets in particular is
@@ -77,6 +78,82 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
     print("Migration and seeding complete:")
     print(json.dumps(result, indent=2, default=str, ensure_ascii=False))
+    return 0
+
+
+#: The exact word the operator has to type before anything is deleted. Chosen
+#: to be un-typo-able by accident: it is not "yes", it is not the scope name,
+#: and it is case-sensitive.
+RESET_CONFIRMATION = "DELETE"
+
+#: What each scope leaves behind, in the operator's language rather than in
+#: table names. The table-level truth lives in app/services/reset.py; this is
+#: the sentence printed next to it so the two are read together.
+_RESET_SUMMARY = {
+    "bookings": "keeps every account, room and setting; nobody is logged out",
+    "members": "keeps rooms and settings; recreates the administrator "
+               "from ADMIN_EMAIL / ADMIN_INITIAL_PASSWORD",
+    "all": "keeps nothing; re-seeds settings, the administrator and the "
+           "three example rooms, as on a first deploy",
+}
+
+
+def cmd_reset(args: argparse.Namespace) -> int:
+    """Wipe application data at the chosen scope. Irreversible.
+
+    Refuses unless ``--confirm DELETE`` was passed, and refuses *before*
+    touching the environment or opening a connection, so a mistyped
+    invocation cannot even reach the production database.
+    """
+    if args.confirm != RESET_CONFIRMATION:
+        print(
+            "ERROR: refusing to reset: this deletes data permanently and "
+            "cannot be undone.\n"
+            f"       Pass --confirm {RESET_CONFIRMATION} (exactly, in capitals) "
+            "to go ahead.",
+            file=sys.stderr,
+        )
+        return 1
+
+    from app.config import load_config
+    from app.db import create_database
+    from app.services import reset as reset_service
+
+    config = load_config()
+    if config.missing:
+        # ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD are what the administrator is
+        # rebuilt from, so a reset run without them would wipe every account
+        # and then have no way to create one -- locking the owner out of their
+        # own site. Refuse on the whole set, as `migrate` does.
+        print(
+            "ERROR: cannot reset, missing required secret(s): "
+            + ", ".join(config.missing),
+            file=sys.stderr,
+        )
+        return 1
+
+    tables = sorted(reset_service.SCOPE_TABLES[args.scope])
+    print(f"Resetting scope '{args.scope}': {_RESET_SUMMARY[args.scope]}.")
+    print("  Emptying: " + ", ".join(tables))
+    print("  Keeping:  " + ", ".join(
+        sorted(set(reset_service.ALL_TABLES) - set(tables)) + ["schema_migrations"]
+    ))
+    print("  This cannot be undone.")
+
+    db = create_database(config.database_url)
+    try:
+        report = reset_service.reset(db, config, scope=args.scope)
+    finally:
+        db.close()
+
+    print("\nRows removed:")
+    width = max(len(name) for name in report.removed)
+    for table, count in report.removed.items():
+        print(f"  {table.ljust(width)}  {count}")
+    print(f"  {'TOTAL'.ljust(width)}  {report.total_removed}")
+    if report.reseeded:
+        print("\nRe-seeded:")
+        print(json.dumps(report.reseeded, indent=2, default=str, ensure_ascii=False))
     return 0
 
 
@@ -248,6 +325,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verify all required deploy secrets are set in the environment.",
     )
     check_secrets.set_defaults(func=cmd_check_secrets)
+
+    # The choices are spelled out rather than imported from
+    # app.services.reset, so that building the parser -- which happens for
+    # every subcommand, check-secrets included -- stays free of application
+    # imports. tests/test_reset.py asserts the two lists have not drifted.
+    reset = subparsers.add_parser(
+        "reset",
+        help="Permanently delete application data. Requires --confirm DELETE.",
+    )
+    reset.add_argument(
+        "--scope",
+        required=True,
+        choices=("bookings", "members", "all"),
+        help="bookings: bookings and history only. "
+             "members: also every account, including administrators. "
+             "all: everything, back to a freshly deployed system.",
+    )
+    reset.add_argument(
+        "--confirm",
+        default="",
+        help=f"Must be the literal string {RESET_CONFIRMATION!r}. "
+             "Nothing is deleted without it.",
+    )
+    reset.set_defaults(func=cmd_reset)
 
     health = subparsers.add_parser(
         "health", help="Smoke-test a deployed instance's /api/health endpoint."

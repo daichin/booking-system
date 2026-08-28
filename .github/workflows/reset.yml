@@ -1,0 +1,143 @@
+# 清空資料（危險操作）
+#
+# 只能由人在 GitHub 網頁上手動按下按鈕觸發（workflow_dispatch）。
+# 刻意「沒有」push、也「沒有」schedule 觸發：這個工作會永久刪除資料，
+# 絕對不可以在任何情況下自己跑起來。
+#
+# 要成功執行，必須同時做到兩件事：
+#   1. 在「清除範圍」選單選一個範圍。
+#   2. 在「確認文字」欄位輸入大寫的 DELETE（一字不差）。
+# 只按下 Run workflow 而沒有輸入確認文字，GitHub 會擋下來；
+# 就算輸入了別的字，下面第一個步驟也會直接失敗，不會碰到資料庫。
+#
+# 每個範圍實際刪掉哪些資料表，寫在 app/services/reset.py 的最上方；
+# 給非技術人員看的版本寫在 ROLLBACK.md。
+name: Reset
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: '清除範圍'
+        required: true
+        type: choice
+        # 選單預設會選第一個，所以把「破壞性最小」的放第一個。
+        default: bookings
+        options:
+          - bookings   # 只清預約與各種紀錄；帳號、會議室、設定全部保留
+          - members    # 連同所有帳號（含管理員）一起清除；保留會議室與設定
+          - all        # 全部清空，回到剛部署好的狀態
+      confirm:
+        description: '確認文字：請輸入大寫的 DELETE'
+        required: true
+        type: string
+
+# 同一時間只允許一個清除工作，避免兩次清除互相交錯。
+concurrency:
+  group: reset
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: 清空資料
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      EMAIL_PROVIDER_API_KEY: ${{ secrets.EMAIL_PROVIDER_API_KEY }}
+      EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}
+      APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_INITIAL_PASSWORD: ${{ secrets.ADMIN_INITIAL_PASSWORD }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+    steps:
+      # 第一個步驟就先擋。放在取得程式碼之前，是為了讓打錯字的情況
+      # 在任何東西被安裝、任何連線被打開之前就結束。
+      # 輸入值透過 env 傳進來而不是直接寫在指令裡，
+      # 這樣使用者輸入的內容永遠不會被當成 shell 指令執行。
+      - name: 確認輸入的確認文字
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          if [ "$CONFIRM" != "DELETE" ]; then
+            echo "ERROR: 確認文字不正確，已中止，沒有刪除任何資料。" >&2
+            echo "請在「確認文字」欄位輸入大寫的 DELETE（不要有空白、不要小寫）。" >&2
+            exit 1
+          fi
+          echo "確認文字正確。清除範圍：$SCOPE"
+
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+
+      # 缺少 ADMIN_EMAIL 或 ADMIN_INITIAL_PASSWORD 時特別危險：
+      # members 與 all 會刪光所有帳號，再用這兩個 Secret 重建管理員。
+      # 這一步會列出所有缺少的 Secret 名稱後失敗。
+      - name: 檢查必要的 Secrets
+        run: python manage.py check-secrets
+
+      # 正式資料庫是 Postgres，需要 psycopg 才連得上。
+      - name: 安裝套件
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 執行清除
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          python manage.py reset --scope "$SCOPE" --confirm "$CONFIRM" \
+            | tee reset-output.txt
+
+      # 清除本身是一個交易，重建管理員與範例資料則是接在後面的第二個交易。
+      # 萬一清除成功、重建卻失敗（連線中斷之類），系統會停在「沒有任何帳號」
+      # 的狀態，沒有人能登入。migrate 是冪等的，補跑一次就會把設定、管理員
+      # 與範例會議室補回來；已經完成的情況下它什麼都不會改。
+      - name: 補齊管理員與預設資料
+        run: python manage.py migrate
+
+      - name: 寫入清除摘要
+        if: always()
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          {
+            echo "## 清空資料結果"
+            echo
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "✅ 已完成清除，範圍：\`$SCOPE\`。**這個動作無法復原。**"
+              echo
+              echo "實際刪除的資料表與筆數："
+              echo
+              echo '```'
+              cat reset-output.txt
+              echo '```'
+              echo
+              if [ "$SCOPE" != "bookings" ]; then
+                echo "所有帳號都已刪除，管理員已重新建立。"
+                echo "請用 Secret \`ADMIN_EMAIL\` 與 \`ADMIN_INITIAL_PASSWORD\` 登入，"
+                echo "系統會立刻要求你變更密碼。"
+              else
+                echo "帳號、會議室與系統設定都保留著，也不需要重新登入。"
+              fi
+              echo
+              echo "**網站網址：** ${APP_BASE_URL%/}"
+            else
+              echo "❌ 清除未完成。"
+              echo
+              echo "清除是一次寫入完成的，失敗代表**沒有刪除任何東西**，資料維持原狀。"
+              echo "請展開上面失敗的步驟查看原因："
+              echo
+              echo "- 「確認文字不正確」→ 重新執行一次，在確認文字欄位輸入大寫的 \`DELETE\`。"
+              echo "- 「缺少 Secret」→ 依照 SETUP.md 的步驟四補上該 Secret。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
