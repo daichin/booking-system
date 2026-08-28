@@ -321,6 +321,46 @@ th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
   width: auto; min-width: 12rem; max-width: 100%;
   margin-bottom: 0.9rem; font-weight: 600;
 }
+
+/* Tutorial (/tutorial, tutorial/offline.html). Scoped to .tutorial-* classes
+   only -- nothing here touches an existing rule. */
+.tutorial-track-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tutorial-track-toggle {
+  padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--accent);
+  background: var(--accent); color: #fff; font-size: 0.95rem;
+}
+.tutorial-track-toggle.secondary { background: #fff; color: var(--accent); }
+.tutorial-track-toggle:disabled {
+  background: #fff; color: var(--muted); border-color: var(--line); cursor: not-allowed;
+}
+/* Fill/outline alone isn't enough to tell which track is active at a
+   glance -- add an explicit mark so it doesn't depend on color perception. */
+.tutorial-track-toggle.is-active::before { content: "✓ "; }
+.tutorial-progress { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.tutorial-caption { font-size: 1.05rem; margin: 0.25rem 0 0.75rem; }
+.tutorial-hint { font-weight: 600; margin: 0 0 0.5rem; }
+.tutorial-nav { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+/* The element the tutorial wants clicked next. `.slot-action` (and other
+   inert-by-default classes it can be combined with) sets its own background
+   without setting color, so without this override a hotspot button inherited
+   white text on that class's white background -- unreadable. The
+   element+class selector keeps this the winning rule regardless of what
+   else the hotspot is combined with. */
+button.tutorial-hotspot, a.tutorial-hotspot {
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+  outline: 3px solid var(--accent); outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(31, 111, 235, 0.28);
+}
+.tutorial-pulse { animation: tutorial-pulse 1.3s ease-in-out infinite; }
+@keyframes tutorial-pulse {
+  0%, 100% { outline-color: var(--accent); box-shadow: 0 0 0 5px rgba(31, 111, 235, 0.28); }
+  50% { outline-color: var(--ok); box-shadow: 0 0 0 8px rgba(15, 123, 63, 0.22); }
+}
+.tutorial-animate { animation: tutorial-fade 0.18s ease; }
+@keyframes tutorial-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-pulse, .tutorial-animate { animation: none; }
+}
 """
 
 
@@ -377,7 +417,11 @@ def _nav_items(request: Request) -> list[tuple[str, str]]:
     """Navigation appropriate to the viewer's role (spec §3)."""
     user = request.user
     if user is None:
-        return [("/login", t("nav.login")), ("/register", t("nav.register"))]
+        return [
+            ("/login", t("nav.login")),
+            ("/register", t("nav.register")),
+            ("/tutorial", t("nav.tutorial")),
+        ]
 
     items = [
         ("/day", t("nav.day")),
@@ -389,6 +433,7 @@ def _nav_items(request: Request) -> list[tuple[str, str]]:
     ]
     if user.is_admin:
         items.append(("/admin", t("nav.admin")))
+    items.append(("/tutorial", t("nav.tutorial")))
     return items
 
 

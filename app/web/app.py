@@ -39,6 +39,7 @@ _PAGE_MODULES = (
     "app.web.pages.auth_pages",
     "app.web.pages.member_pages",
     "app.web.pages.admin_pages",
+    "app.web.pages.tutorial_pages",
 )
 
 

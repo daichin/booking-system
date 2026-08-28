@@ -29,6 +29,7 @@ STRINGS: dict[str, str] = {
     "nav.week": "單室週表",
     "nav.my_bookings": "我的預約",
     "nav.admin": "管理後台",
+    "nav.tutorial": "教學導覽",
     "nav.home": "回首頁",
     "nav.skip": "跳到主要內容",
     "nav.language": "語言",

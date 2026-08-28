@@ -6,6 +6,7 @@ Subcommands:
     python manage.py migrate            # run migrations + seed settings/admin/rooms
     python manage.py check-secrets      # exit non-zero, naming any missing secret
     python manage.py health --url URL   # post-deploy smoke test against /api/health
+    python manage.py tutorial-build     # regenerate tutorial/offline.html
 
 Standard library only -- this script must run before `pip install -r
 requirements.txt` has necessarily happened (check-secrets in particular is
@@ -181,6 +182,56 @@ def cmd_health(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tutorial_build(args: argparse.Namespace) -> int:
+    """Regenerate the standalone tutorial/offline.html from tutorial_content.py.
+
+    Self-contained: everything (stylesheet, engine script, step data) is
+    inlined so the file opens correctly via `file://` with no server, no
+    network requests, and no build step. Needs no secrets/DB/network, and is
+    idempotent -- re-running it after an unrelated no-op produces the same
+    bytes.
+
+    This is a content-authoring step a maintainer runs and commits after
+    editing app/web/tutorial_content.py; it is not run automatically by
+    `migrate` or any deploy step.
+    """
+    import pathlib
+
+    from app.web.layout import STYLESHEET
+    from app.web.pages.tutorial_pages import _steps_json_for_html, _track_toggle
+    from app.web.tutorial_content import TUTORIAL_SCRIPT
+
+    body = (
+        '<main>\n<h1>Tutorial</h1>\n'
+        + str(_track_toggle("member"))
+        + '\n<div id="tutorial-mount"></div>\n'
+        + '<script type="application/json" id="tutorial-steps">'
+        + _steps_json_for_html()
+        + "</script>\n"
+        + '<script id="tutorial-track">member</script>\n'
+        + "</main>\n"
+    )
+    html = (
+        "<!doctype html>\n"
+        '<html lang="en">\n<head>\n'
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>Tutorial (offline)</title>\n"
+        f"<style>{STYLESHEET}</style>\n"
+        "</head>\n<body>\n"
+        f"{body}\n"
+        f"<script>{TUTORIAL_SCRIPT}</script>\n"
+        "</body>\n</html>\n"
+    )
+
+    out_path = pathlib.Path(__file__).parent / "tutorial" / "offline.html"
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
+    print(f"OK: wrote {out_path.relative_to(pathlib.Path(__file__).parent)} "
+          f"({len(html.encode('utf-8'))} bytes)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Operational CLI for the meeting room booking system."
@@ -222,6 +273,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds between attempts (default: 15).",
     )
     health.set_defaults(func=cmd_health)
+
+    tutorial_build = subparsers.add_parser(
+        "tutorial-build",
+        help="Regenerate the standalone tutorial/offline.html from tutorial_content.py.",
+    )
+    tutorial_build.set_defaults(func=cmd_tutorial_build)
 
     return parser
 

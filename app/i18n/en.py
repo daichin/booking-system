@@ -25,6 +25,7 @@ STRINGS: dict[str, str] = {
     "nav.week": "Room week view",
     "nav.my_bookings": "My bookings",
     "nav.admin": "Admin console",
+    "nav.tutorial": "Tutorial",
     "nav.home": "Home",
     "nav.skip": "Skip to main content",
     "nav.language": "Language",

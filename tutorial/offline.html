@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial (offline)</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2430; --muted: #5d6b7a;
+  --line: #dfe4ea; --accent: #1f6feb; --accent-ink: #ffffff;
+  --ok: #0f7b3f; --ok-bg: #e6f4ec; --warn: #8a5a00; --warn-bg: #fdf3df;
+  --err: #b3261e; --err-bg: #fdecea; --mine: #e8f0fe; --other: #eef1f4;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+               system-ui, -apple-system, sans-serif;
+  font-size: 16px; line-height: 1.6;
+}
+a { color: var(--accent); }
+.site-header {
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+}
+.site-header .bar {
+  max-width: 1100px; margin: 0 auto; padding: 0.75rem 1rem;
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+}
+.brand { font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--ink); }
+.site-nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; margin: 0; padding: 0; }
+.site-nav a { text-decoration: none; padding: 0.35rem 0.6rem; border-radius: 6px; display: block; }
+.site-nav a[aria-current="page"] { background: var(--mine); font-weight: 600; }
+.spacer { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+/* The ellipsis is the safety net that stops a long name pushing the
+   log-out button and the globe off the row -- but 8em is about eight Latin
+   characters, so an English name was clipped on a 1400px screen with room
+   to spare. The cap grows with the viewport; the title attribute keeps the
+   full name reachable whenever it does truncate. */
+.account-name { color: var(--muted); font-size: 0.9rem; max-width: 8em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 768px) { .account-name { max-width: 14em; } }
+@media (min-width: 1100px) { .account-name { max-width: 22em; } }
+
+/* Language switcher: a globe that opens a two-item menu. The text of a
+   language name varies wildly in width ("English" vs "中文"), and a header
+   that has to fit a member's name, a log-out button and the nav has no width
+   to spare -- an icon costs the same in every language. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.lang-switch { position: relative; flex: 0 0 auto; }
+.lang-switch > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  justify-content: center; width: 2.4rem; height: 2.4rem; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+}
+.lang-switch > summary::-webkit-details-marker { display: none; }
+.lang-switch > summary:hover { color: var(--ink); border-color: var(--accent); }
+.lang-switch[open] > summary { color: var(--accent); border-color: var(--accent); }
+.lang-list {
+  list-style: none; margin: 0.35rem 0 0; padding: 0.3rem;
+  position: absolute; inset-inline-end: 0; z-index: 20; min-width: 9rem;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 6px 20px rgba(28, 36, 48, 0.14);
+}
+.lang-list a, .lang-list .lang-current {
+  display: block; padding: 0.45rem 0.7rem; border-radius: 6px;
+  text-decoration: none; color: var(--ink); white-space: nowrap;
+}
+.lang-list a:hover { background: var(--mine); }
+.lang-list .lang-current { background: var(--mine); font-weight: 700; }
+
+/* On a phone the header had four groups and wrapped to four rows, eating the
+   screen before any content appeared. Below 640px the title and the member's
+   name are dropped and the nav scrolls sideways instead of wrapping, which
+   holds the whole header to two rows however many nav items there are. */
+@media (max-width: 640px) {
+  .site-header .bar { padding: 0.5rem 0.75rem; gap: 0.4rem 0.6rem; }
+  .brand { display: none; }
+  .account-name { display: none; }
+  .site-nav { flex: 1 1 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .site-nav ul { flex-wrap: nowrap; gap: 0.25rem; }
+  .site-nav a { white-space: nowrap; padding: 0.3rem 0.5rem; }
+  .spacer { margin-left: 0; }
+  .lang-switch { margin-left: auto; }
+}
+main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem;
+}
+h1 { font-size: 1.35rem; margin: 0 0 0.75rem; }
+h2 { font-size: 1.1rem; margin: 1.25rem 0 0.5rem; }
+.muted { color: var(--muted); }
+.notice { padding: 0.7rem 0.9rem; border-radius: var(--radius); margin-bottom: 1rem; border: 1px solid transparent; }
+.notice-info { background: var(--mine); border-color: #cbd9f2; }
+.notice-success { background: var(--ok-bg); border-color: #bfe0cd; color: var(--ok); }
+.notice-warning { background: var(--warn-bg); border-color: #ecd9a8; color: var(--warn); }
+.notice-error { background: var(--err-bg); border-color: #f2c4c0; color: var(--err); }
+.field { margin-bottom: 0.9rem; }
+label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.95rem; }
+input, select, textarea {
+  width: 100%; padding: 0.6rem 0.7rem; font: inherit; color: inherit;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+}
+input:focus, select:focus, textarea:focus, button:focus-visible {
+  outline: 3px solid #bcd3fb; outline-offset: 1px; border-color: var(--accent);
+}
+input[readonly] { background: #f1f3f5; color: var(--muted); }
+/* A checkbox is not a text field. The shared `width: 100%` above stretched
+   it into a full-width bar and shoved its own label text out of the row. */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; flex: 0 0 auto; margin: 0; padding: 0;
+  accent-color: var(--accent);
+}
+label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+
+/* Read-only account details, and the one place on the site that destroys
+   something. The red border is the only warning a reader gets before the
+   button, so it is part of the layout rather than a decoration. */
+.detail-list { display: grid; gap: 0.6rem; margin-bottom: 1rem; }
+@media (min-width: 600px) { .detail-list { grid-template-columns: 1fr 1fr; } }
+.detail-label { color: var(--muted); font-size: 0.85rem; }
+.detail-value { overflow-wrap: anywhere; }
+.danger-zone { border-color: #f2c4c0; }
+.danger-zone h2 { color: var(--err); margin-top: 0; }
+.help { color: var(--muted); display: block; margin-top: 0.2rem; }
+button, .btn {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px;
+  padding: 0.6rem 1rem; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-ink); text-decoration: none;
+  display: inline-block; text-align: center;
+}
+button.secondary, .btn.secondary { background: #fff; color: var(--accent); }
+button.danger, .btn.danger { background: var(--err); border-color: var(--err); color: #fff; }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+th, td { text-align: start; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: #f2f4f7; font-size: 0.85rem; letter-spacing: 0.02em; }
+.tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.8rem; background: var(--other); }
+.tag-confirmed { background: var(--ok-bg); color: var(--ok); }
+.tag-preempted { background: var(--warn-bg); color: var(--warn); }
+.tag-cancelled { background: var(--err-bg); color: var(--err); }
+
+/* Jumping between rooms (or weeks) without scrolling the whole page. A
+   <details> behaves like a dropdown but is native HTML, so this needs no
+   JavaScript. */
+/* No `scroll-behavior: smooth` here. With it set on the root, a fragment
+   navigation to an element at the very top of the document silently does
+   nothing -- which is what made the back-to-top button appear dead even
+   after its target was moved off the sticky header. Fragment jumps are
+   therefore instant, which always works, and the script animates the two
+   places where animation is worth having. */
+.jump { margin-bottom: 0.9rem; }
+.jump > summary {
+  cursor: pointer; display: inline-block; list-style: none;
+  padding: 0.5rem 0.9rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); font-weight: 600; font-size: 0.95rem;
+}
+.jump > summary::-webkit-details-marker { display: none; }
+.jump > summary::after { content: " ▾"; color: var(--muted); }
+.jump[open] > summary::after { content: " ▴"; }
+.jump-list {
+  list-style: none; margin: 0.4rem 0 0; padding: 0.4rem;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; max-height: 18rem; overflow-y: auto;
+  display: grid; gap: 0.15rem; grid-template-columns: 1fr;
+}
+@media (min-width: 600px) { .jump-list { grid-template-columns: 1fr 1fr; } }
+.jump-list a {
+  display: block; padding: 0.5rem 0.7rem; border-radius: 6px;
+  text-decoration: none; color: var(--ink);
+}
+.jump-list a:hover { background: var(--mine); }
+.jump-list a[aria-current="true"] { background: var(--mine); font-weight: 700; }
+
+/* Day grid: stacked on a phone, columns once there is width.
+   Column counts are capped rather than auto-fitted. auto-fit packed five
+   rooms onto a wide screen, leaving each one too narrow for a booking title
+   and a slot action to sit side by side. */
+.day-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+@media (min-width: 700px) { .day-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) {
+  .day-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .day-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+}
+.room-column {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+  /* Clear the sticky header when jumped to from the room list. */
+  scroll-margin-top: 6.5rem;
+}
+.room-column h3 {
+  margin: 0; padding: 0.6rem 0.75rem; background: #f2f4f7; font-size: 1rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.slot-list { list-style: none; margin: 0; padding: 0; }
+
+/* Every row is exactly the same height. Columns are independent lists, so a
+   booking title that wrapped onto a second line used to push that column out
+   of step with the ones beside it and the times stopped lining up across the
+   grid. Overflowing text is clipped instead; the full text is in the row's
+   title attribute. */
+.slot {
+  display: flex; gap: 0.5rem; padding: 0 0.75rem; align-items: center;
+  border-bottom: 1px solid #eef1f4; height: 2.75rem;
+  /* Picking a start reloads the page and lands on this row. Clear both the
+     sticky header and the sticky selection banner that appears above it,
+     otherwise the row you just chose sits underneath them. */
+  scroll-margin-top: 8.5rem;
+}
+.slot-time {
+  flex: none; font-variant-numeric: tabular-nums;
+  color: var(--muted); font-size: 0.85rem; min-width: 5.5em;
+}
+.slot-detail {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slot-free { color: var(--muted); }
+.slot.is-booked { background: var(--other); }
+.slot.is-mine { background: var(--mine); }
+.slot-title { font-weight: 600; }
+.slot-owner { color: var(--muted); font-size: 0.85rem; margin-inline-start: 0.4em; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
+.legend span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 3px; margin-inline-end: 0.35em; vertical-align: middle; }
+.legend .k-mine::before { background: var(--mine); border: 1px solid #cbd9f2; }
+.legend .k-other::before { background: var(--other); border: 1px solid var(--line); }
+.legend .k-free::before { background: #fff; border: 1px solid var(--line); }
+/* Two-click slot picking. The "selecting" state must look different enough
+   that it is obvious the second click means something else. */
+.date-bar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.5rem; }
+.date-bar .btn { padding: 0.45rem 0.8rem; font-size: 0.9rem; }
+.date-jump { display: flex; gap: 0.35rem; align-items: center; }
+.date-jump input { width: auto; min-width: 9.5rem; padding: 0.4rem 0.5rem; }
+.date-jump button { padding: 0.45rem 0.8rem; font-size: 0.9rem; }
+.day-heading { font-weight: 700; font-size: 1.05rem; margin: 0.25rem 0 0.75rem; }
+.selection-banner {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+  justify-content: space-between; background: var(--mine);
+  border: 2px solid var(--accent); border-radius: var(--radius);
+  padding: 0.75rem 1rem; margin-bottom: 0.9rem; position: sticky; top: 3.6rem; z-index: 5;
+}
+.selection-text { font-weight: 600; }
+.room-column.is-selecting { outline: 2px solid var(--accent); }
+.slot-action {
+  margin-inline-start: auto; white-space: nowrap; text-decoration: none;
+  font-size: 0.85rem; font-weight: 600; padding: 0.2rem 0.55rem;
+  border: 1px solid var(--line); border-radius: 999px; background: #fff;
+}
+.slot-action:hover { background: var(--mine); border-color: var(--accent); }
+.slot.is-start { background: var(--accent); }
+.slot.is-start .slot-time, .slot.is-start .slot-free, .slot.is-start .slot-owner { color: #e8f0fe; }
+.slot.is-start .slot-title { color: #fff; }
+.slot.is-in-range { background: var(--mine); }
+.slot.is-unreachable { opacity: 0.45; }
+.manual-entry { margin-top: 1rem; }
+.manual-entry > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+
+/* One-click meeting subjects. Each chip is its own submit button. */
+.chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
+.chip {
+  padding: 0.5rem 0.9rem; border-radius: 999px; font-size: 0.95rem;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+.chip.secondary { background: #fff; color: var(--accent); }
+
+.confirm-panel { border: 2px solid var(--warn); background: var(--warn-bg); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
+.confirm-panel h2 { margin-top: 0; color: var(--warn); }
+.victim-list { margin: 0.5rem 0 0; padding-inline-start: 1.2rem; }
+.site-footer { max-width: 1100px; margin: 0 auto; padding: 1rem; color: var(--muted); font-size: 0.85rem; }
+.inline-form { display: inline; }
+.stack > * + * { margin-top: 0.75rem; }
+.grid-2 { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 1rem; top: 0.5rem; background: #fff; padding: 0.5rem; z-index: 20; }
+
+/* Back to top. A plain anchor, so it works with no JavaScript and the
+   scrolling is animated by the same scroll-behavior rule as the jump lists
+   (and is likewise disabled for reduced-motion readers). Always visible:
+   fading it in after a scroll threshold is the one variant that would need
+   JavaScript. */
+.to-top {
+  position: fixed; inset-inline-end: 1rem; bottom: 1rem; z-index: 15;
+  width: 3rem; height: 3rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel); color: var(--accent);
+  border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(28, 36, 48, 0.18);
+  text-decoration: none; font-size: 1.3rem; line-height: 1; opacity: 0.92;
+}
+.to-top:hover { opacity: 1; background: var(--mine); border-color: var(--accent); }
+/* Keep it clear of the last column's slot actions on a narrow screen. */
+@media (max-width: 640px) { main { padding-bottom: 4.5rem; } }
+@media print { .to-top { display: none; } }
+/* Only applied once the script runs, so with no JavaScript the button simply
+   stays visible rather than disappearing for good. */
+.to-top.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.to-top { transition: opacity 0.18s ease, visibility 0.18s ease; }
+@media (prefers-reduced-motion: reduce) { .to-top { transition: none; } }
+.jump-select {
+  width: auto; min-width: 12rem; max-width: 100%;
+  margin-bottom: 0.9rem; font-weight: 600;
+}
+
+/* Tutorial (/tutorial, tutorial/offline.html). Scoped to .tutorial-* classes
+   only -- nothing here touches an existing rule. */
+.tutorial-track-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tutorial-track-toggle {
+  padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--accent);
+  background: var(--accent); color: #fff; font-size: 0.95rem;
+}
+.tutorial-track-toggle.secondary { background: #fff; color: var(--accent); }
+.tutorial-track-toggle:disabled {
+  background: #fff; color: var(--muted); border-color: var(--line); cursor: not-allowed;
+}
+/* Fill/outline alone isn't enough to tell which track is active at a
+   glance -- add an explicit mark so it doesn't depend on color perception. */
+.tutorial-track-toggle.is-active::before { content: "✓ "; }
+.tutorial-progress { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.tutorial-caption { font-size: 1.05rem; margin: 0.25rem 0 0.75rem; }
+.tutorial-hint { font-weight: 600; margin: 0 0 0.5rem; }
+.tutorial-nav { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+/* The element the tutorial wants clicked next. `.slot-action` (and other
+   inert-by-default classes it can be combined with) sets its own background
+   without setting color, so without this override a hotspot button inherited
+   white text on that class's white background -- unreadable. The
+   element+class selector keeps this the winning rule regardless of what
+   else the hotspot is combined with. */
+button.tutorial-hotspot, a.tutorial-hotspot {
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+  outline: 3px solid var(--accent); outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(31, 111, 235, 0.28);
+}
+.tutorial-pulse { animation: tutorial-pulse 1.3s ease-in-out infinite; }
+@keyframes tutorial-pulse {
+  0%, 100% { outline-color: var(--accent); box-shadow: 0 0 0 5px rgba(31, 111, 235, 0.28); }
+  50% { outline-color: var(--ok); box-shadow: 0 0 0 8px rgba(15, 123, 63, 0.22); }
+}
+.tutorial-animate { animation: tutorial-fade 0.18s ease; }
+@keyframes tutorial-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-pulse, .tutorial-animate { animation: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Tutorial</h1>
+<div class="tutorial-track-toggles"><button type="button" class="tutorial-track-toggle is-active" data-track="member" aria-pressed="true">Member walkthrough</button><button type="button" class="tutorial-track-toggle secondary" data-track="admin" aria-pressed="false">Admin walkthrough</button></div>
+<div id="tutorial-mount"></div>
+<script type="application/json" id="tutorial-steps">[{"id": "register-form", "track": "member", "caption": "Fill in your email, a password, and a few basic details to register.", "screen": "field_form", "screen_data": {"fields": [{"label": "Email", "type": "email"}, {"label": "Password", "type": "password"}, {"label": "Full name", "type": "text"}, {"label": "Department", "type": "text"}, {"label": "Phone", "type": "text"}], "submit_key": "auth.register.submit", "submit_label": "Register"}}, {"id": "register-submitted", "track": "member", "caption": "The system always shows the same message here, whether or not this email already has an account \u2014 it never confirms or denies.", "screen": "notice_panel", "screen_data": {"message_key": "auth.register.success", "kind": "success", "message": "If this email can be registered, we have sent a verification email; please check your inbox."}}, {"id": "register-verified", "track": "member", "caption": "Clicking the verification link in the email lands here.", "screen": "notice_panel", "screen_data": {"message_key": "auth.verify.success", "kind": "success", "message": "Your email has been verified. Please wait for an administrator to approve your account."}}, {"id": "orientation-header", "track": "member", "caption": "Before diving into any one feature \u2014 this header sits at the top of every page. Day overview, Week view, My bookings and Account are always there; an Admin console link only shows up if you're an admin.", "screen": "header_preview", "screen_data": {"brand": "Meeting Room Booking", "nav_items": ["Day overview", "Room week view", "My bookings", "Account"], "admin_item": "Admin console", "account_name": "You", "logout_label": "Log out", "language_label": "Language"}}, {"id": "orientation-day-calendar", "track": "member", "caption": "And this is the main day view \u2014 every room's availability for one day, side by side. The rest of this walkthrough keeps coming back to this page.", "screen": "day_overview", "screen_data": {"date_label": "Tue, Sep 1", "prev_label": "\u2039 Previous day", "today_label": "Today", "next_label": "Next day \u203a", "legend": ["My booking", "Booked by others", "Free"], "jump_label": "Jump to room", "rooms": [{"name": "Meeting Room 1", "slots": [{"time": "09:00\u201309:30", "kind": "free"}, {"time": "09:30\u201310:00", "kind": "other", "detail": "Standup"}]}, {"name": "Meeting Room 2", "slots": [{"time": "09:00\u201309:30", "kind": "free"}, {"time": "09:30\u201310:00", "kind": "mine", "detail": "1:1"}]}]}}, {"id": "register-pending", "track": "member", "caption": "One state worth calling out on that same page: you can log in and browse read-only right away, but booking stays locked until an admin approves your account.", "screen": "day_grid_readonly", "screen_data": {"banner_key": "error.AWAITING_APPROVAL", "legend": ["My booking", "Booked by others", "Free"], "banner": "Your account is awaiting administrator approval."}}, {"id": "invite-form", "track": "member", "caption": "An admin-issued invitation link works differently: the email is already confirmed and locked, so there's no verification step and no waiting for approval.", "screen": "field_form", "screen_data": {"notice_key": "auth.invite.intro", "fields": [{"label": "Email", "type": "email", "value": "sam@example.com"}, {"label": "Password", "type": "password"}, {"label": "Full name", "type": "text"}, {"label": "Department", "type": "text"}, {"label": "Phone", "type": "text"}], "submit_key": "auth.invite.submit", "submit_label": "Create account", "notice": "Please complete the following details to activate your account. Your email has already been confirmed by the invitation and cannot be changed."}}, {"id": "invite-active", "track": "member", "caption": "That's it \u2014 the account is active immediately, and you're signed straight into the day view, ready to book.", "screen": "notice_panel", "screen_data": {"message": "Your account is now active.", "kind": "success"}}, {"id": "bridge-login", "track": "member", "caption": "Every page has this header when you're signed out. Click \u201cLog in\u201d to continue.", "screen": "nav_click", "screen_data": {"items": [{"label": "Log in", "hotspot": true}, {"label": "Register", "hotspot": false}]}}, {"id": "login-form", "track": "member", "caption": "Logging in only needs your email and password.", "screen": "field_form", "screen_data": {"fields": [{"label": "Email", "type": "email"}, {"label": "Password", "type": "password"}], "submit_key": "auth.login.submit", "submit_label": "Log in"}}, {"id": "forgot-form", "track": "member", "caption": "Forgotten your password? Just the email address \u2014 there's a link to this on the login page itself.", "screen": "field_form", "screen_data": {"fields": [{"label": "Email", "type": "email"}], "submit_key": "auth.forgot.submit", "submit_label": "Send reset link"}}, {"id": "forgot-success", "track": "member", "caption": "Same rule as registration: this message never confirms or denies whether the address has an account.", "screen": "notice_panel", "screen_data": {"message_key": "auth.forgot.success", "kind": "success", "message": "If this email matches an account, we have sent a password reset link; please check your inbox."}}, {"id": "reset-form", "track": "member", "caption": "The link in that email leads here \u2014 pick a new password.", "screen": "field_form", "screen_data": {"fields": [{"label": "New password", "type": "password"}, {"label": "Confirm password", "type": "password"}], "submit_key": "auth.reset.submit", "submit_label": "Reset password"}}, {"id": "reset-success", "track": "member", "caption": "Password changed \u2014 log in with it from here on.", "screen": "notice_panel", "screen_data": {"message_key": "auth.reset.success", "kind": "success", "message": "Your password has been reset. Please log in with your new password."}}, {"id": "forced-password-change", "track": "member", "caption": "One special case: an account created from a temporary password (like a freshly seeded admin) is forced through this screen \u2014 not clicked into, redirected into \u2014 before it can do anything else.", "screen": "field_form", "screen_data": {"notice_key": "auth.password.forced_notice", "fields": [{"label": "Current password", "type": "password"}, {"label": "New password", "type": "password"}, {"label": "Confirm password", "type": "password"}], "submit_key": "auth.password.submit", "submit_label": "Update password", "notice": "For your account security, please set a new password before continuing."}}, {"id": "bridge-day-overview", "track": "member", "caption": "Back to the day view to actually book something \u2014 click \u201cDay overview\u201d.", "screen": "nav_click", "screen_data": {"items": [{"label": "Day overview", "hotspot": true}, {"label": "Room week view", "hotspot": false}, {"label": "My bookings", "hotspot": false}, {"label": "Account", "hotspot": false}]}}, {"id": "book-pick-start", "track": "member", "caption": "Every room's day is shown in 30-minute slots \u2014 some free, some already booked by you or by others. Click \u201cBook\u201d on any free slot to start.", "screen": "day_grid_interactive", "screen_data": {"hint": "Choose any time slot to start booking.", "room": "Meeting Room 1", "legend": ["My booking", "Booked by others", "Free"], "slots": [{"time": "13:30\u201314:00", "kind": "other", "detail": "Weekly sync \u30fb Alex Wang"}, {"time": "14:00\u201314:30", "kind": "free", "action_label": "+ Book"}, {"time": "14:30\u201315:00", "kind": "free"}, {"time": "15:00\u201315:30", "kind": "mine", "detail": "1:1 \u30fb You"}]}}, {"id": "book-pick-end", "track": "member", "caption": "The second click sets when it ends. You can only pick up to the room's maximum booking length.", "screen": "day_grid_interactive", "screen_data": {"hint": "Starting 14:00 in Meeting Room 1 - now choose when it ends", "room": "Meeting Room 1", "slots": [{"time": "14:00\u201314:30", "kind": "start", "detail": "Start"}, {"time": "14:30\u201315:00", "kind": "free", "action_label": "End here (1 hr)"}]}}, {"id": "book-confirm-subject", "track": "member", "caption": "Give the meeting a title \u2014 pick a preset or type your own \u2014 then submit.", "screen": "booking_form", "screen_data": {"summary": {"room": "Meeting Room 1", "time": "14:00\u201315:00", "duration": "1 hr"}, "change_time_label": "Change time", "pick_subject_label": "Pick a subject to finish booking:", "presets": ["Weekly sync", "1:1", "Project review"], "custom_label": "Or type your own", "custom_placeholder": "e.g. Q3 budget review", "submit_label": "Confirm booking"}}, {"id": "book-success", "track": "member", "caption": "Because no one else held this slot, the booking is created immediately \u2014 no extra confirmation needed. That confirmation step only appears when you'd be overriding someone else's existing booking.", "screen": "notice_panel", "screen_data": {"message_key": "my.booked_success", "kind": "success", "message": "Booking created successfully."}}, {"id": "book-upcoming", "track": "member", "caption": "It now appears under My bookings, where you can cancel it any time before it starts.", "screen": "table_list", "screen_data": {"heading": "Upcoming", "columns": ["Room", "Title", "Time", ""], "rows": [{"cells": ["Meeting Room 1", "Weekly sync", "14:00\u201315:00"], "actions": [{"label": "Cancel booking"}]}]}}, {"id": "preempt-pick-slot", "track": "member", "caption": "Still on the day view \u2014 now suppose the 14:00 slot is already held by Alex Wang, who has a lower priority level than you. It's still shown as clickable \u2014 the system decides whether you're allowed to take it only after you try.", "screen": "day_grid_interactive", "screen_data": {"hint": "Choose any time slot to start booking.", "room": "Meeting Room 1", "slots": [{"time": "14:00\u201314:30", "kind": "other", "detail": "Team sync \u30fb Alex Wang", "action_label": "+ Book"}, {"time": "14:30\u201315:00", "kind": "other", "detail": "Team sync \u30fb Alex Wang"}]}}, {"id": "preempt-warning", "track": "member", "caption": "Because your level is higher, the system offers to override it instead of blocking you \u2014 but it always names exactly who and what would be cancelled first, right here.", "screen": "booking_form", "screen_data": {"warning": {"title": "This time is already booked", "message": "Continuing will cancel 1 existing booking(s). Those members will be notified by email.", "victims": ["Meeting Room 1 \u30fb 14:00\u201315:00 \u30fb Alex Wang\uff08Sales\uff09"]}, "summary": {"room": "Meeting Room 1", "time": "14:00\u201315:00", "duration": "1 hr"}, "change_time_label": "Change time", "pick_subject_label": "Pick a subject to finish booking:", "presets": ["Weekly sync", "1:1", "Project review"], "custom_label": "Or type your own", "custom_placeholder": "e.g. Q3 budget review", "submit_label": "Confirm and override"}}, {"id": "preempt-confirm", "track": "member", "caption": "This is the second, explicit confirmation the spec requires before anything is actually cancelled \u2014 a plain \"submit\" was never enough on its own.", "screen": "confirm_dialog", "screen_data": {"message": "This will cancel 1 existing booking(s); the affected members will be notified by email. Continue?", "victims": ["Meeting Room 1 \u30fb 14:00\u201315:00 \u30fb Alex Wang\uff08Sales\uff09"], "submit_label": "Confirm override and submit", "cancel_label": "Cancel, go back", "danger": true}}, {"id": "preempt-success", "track": "member", "caption": "The room is now yours. Alex Wang gets an email saying their booking was cancelled and naming the room and time \u2014 but never who took it.", "screen": "notice_panel", "screen_data": {"message_key": "my.booked_success", "kind": "success", "message": "Booking created successfully."}}, {"id": "preempt-displaced-view", "track": "member", "caption": "From Alex Wang's side: the booking moves into their history, tagged as overridden. Rebooking is on them \u2014 the system doesn't do it automatically.", "screen": "table_list", "screen_data": {"heading": "History", "columns": ["Room", "Title", "Time", "Status"], "rows": [{"cells": ["Meeting Room 1", "Team sync", "14:00\u201315:00"], "status": {"text": "Overridden", "tag_class": "tag-preempted"}}]}}, {"id": "bridge-my-bookings", "track": "member", "caption": "To cancel a booking, start from the header \u2014 click \u201cMy bookings\u201d.", "screen": "nav_click", "screen_data": {"items": [{"label": "Day overview", "hotspot": false}, {"label": "Room week view", "hotspot": false}, {"label": "My bookings", "hotspot": true}, {"label": "Account", "hotspot": false}]}}, {"id": "cancel-open", "track": "member", "caption": "Cancelling your own booking is one click from here, any time before it starts.", "screen": "table_list", "screen_data": {"heading": "Upcoming", "columns": ["Room", "Title", "Time", ""], "rows": [{"cells": ["Meeting Room 1", "Weekly sync", "14:00\u201315:00"], "actions": [{"label": "Cancel booking", "hotspot": true, "danger": true}]}]}}, {"id": "cancel-success", "track": "member", "caption": "The slot is freed up immediately for anyone else to book.", "screen": "notice_panel", "screen_data": {"message_key": "my.cancelled_success", "kind": "success", "message": "Booking cancelled."}}, {"id": "admin-forced-password", "track": "admin", "caption": "The seeded admin account's initial password lives in a deploy secret, so its very first login is forced through this same screen before anything else is reachable.", "screen": "field_form", "screen_data": {"notice_key": "auth.password.forced_notice", "fields": [{"label": "Current password", "type": "password"}, {"label": "New password", "type": "password"}, {"label": "Confirm password", "type": "password"}], "submit_key": "auth.password.submit", "submit_label": "Update password", "notice": "For your account security, please set a new password before continuing."}}, {"id": "bridge-admin-console", "track": "admin", "caption": "An admin sees one extra link in the same header \u2014 \u201cAdmin console\u201d.", "screen": "nav_click", "screen_data": {"items": [{"label": "Day overview", "hotspot": false}, {"label": "Room week view", "hotspot": false}, {"label": "My bookings", "hotspot": false}, {"label": "Account", "hotspot": false}, {"label": "Admin console", "hotspot": true}]}}, {"id": "admin-dashboard", "track": "admin", "caption": "The dashboard is the admin's landing page \u2014 pending work and system health at a glance, including whether the reminder cron job is actually still running.", "screen": "dashboard_panel", "screen_data": {"title": "Admin console", "stats": [{"label": "Pending registrations", "value": "2 user(s) are awaiting approval."}, {"label": "Emails sent today", "value": "14 / 200 (daily cap)"}, {"label": "Reminder schedule", "value": "Last run: 2026-08-28 13:15 (Succeeded)"}]}}, {"id": "bridge-approvals", "track": "admin", "caption": "The admin console has its own row of tabs below the header. Click \u201cApprovals\u201d.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": true}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-approvals", "track": "admin", "caption": "New registrations wait here. Approve makes the account active immediately; reject needs no reason \u2014 it's a single click either way.", "screen": "table_list", "screen_data": {"heading": "Pending registrations", "columns": ["Name", "Department", "Phone", "Email", ""], "rows": [{"cells": ["Sam Lin", "Engineering", "0912-345-678", "sam@example.com"], "actions": [{"label": "Approve", "hotspot": true}, {"label": "Reject", "danger": true}]}]}}, {"id": "bridge-invitations", "track": "admin", "caption": "Click \u201cInvitations\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": true}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-invitations-form", "track": "admin", "caption": "Invitations skip the whole approve/reject step: paste in one or more emails, pick a starting level, and send.", "screen": "field_form", "screen_data": {"fields": [{"label": "Emails (one per line, or comma-separated)", "type": "textarea", "value": "sam@example.com"}, {"label": "Starting level (leave blank for 1)", "type": "number", "value": "1"}], "submit_key": "admin.invitations.send", "submit_label": "Send invitations"}}, {"id": "admin-invitations-result", "track": "admin", "caption": "Each address gets its own result line, so a typo in a batch of twenty doesn't silently fail the other nineteen.", "screen": "list_panel", "screen_data": {"heading": "Send results", "items": ["Invitation sent to sam@example.com."]}}, {"id": "admin-invitations-outstanding", "track": "admin", "caption": "Every unused invitation stays visible and revocable until it expires.", "screen": "table_list", "screen_data": {"heading": "Outstanding invitations", "columns": ["Email", "Starting level", "Status", ""], "rows": [{"cells": ["sam@example.com", "1", "Valid"], "actions": [{"label": "Revoke", "hotspot": true, "danger": true}]}]}}, {"id": "bridge-members", "track": "admin", "caption": "Click \u201cMembers\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": true}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-members-level", "track": "admin", "caption": "Levels drive preemption directly \u2014 raising someone's level here is what lets them start overriding others.", "screen": "table_list", "screen_data": {"heading": "Member management", "columns": ["Name", "Email", "Level", ""], "rows": [{"cells": ["Alex Wang", "alex@example.com", "3"], "actions": [{"label": "Update level", "hotspot": true}]}]}}, {"id": "admin-members-suspend", "track": "admin", "caption": "Suspending blocks login immediately without touching their history; the same button becomes \"Reactivate\" once suspended.", "screen": "table_list", "screen_data": {"heading": "Member management", "columns": ["Name", "Status", ""], "rows": [{"cells": ["Alex Wang", "Active"], "actions": [{"label": "Suspend", "hotspot": true, "danger": true}]}]}}, {"id": "admin-delete-confirm", "track": "admin", "caption": "Deleting an account never erases it \u2014 it anonymizes the person's details but keeps every booking, override and audit record forever.", "screen": "confirm_dialog", "screen_data": {"title": "Delete account", "message": "Delete the account of Alex Wang (alex@example.com)?", "explain": "The account is closed and signed out immediately, and any bookings it holds for the future are cancelled so the rooms are free.", "note": "Past bookings, preemption records and the audit trail are kept, with this member's name, email address and phone number removed from them. This cannot be undone.", "submit_label": "Delete this account", "cancel_label": "Cancel", "danger": true}}, {"id": "admin-delete-success", "track": "admin", "caption": "Done. Their name is gone from the record, but the record itself stays.", "screen": "notice_panel", "screen_data": {"message": "The account has been deleted. 1 future booking(s) were cancelled.", "kind": "success"}}, {"id": "bridge-rooms", "track": "admin", "caption": "Click \u201cRooms\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": true}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-rooms-list", "track": "admin", "caption": "Rooms are managed entirely in-app \u2014 no database access needed to add one or take one out of service.", "screen": "table_list", "screen_data": {"heading": "Room management", "columns": ["Name", "Capacity", "Status", ""], "rows": [{"cells": ["Meeting Room 1", "12", "Active"], "actions": [{"label": "Edit"}, {"label": "Disable", "hotspot": true, "danger": true}]}]}}, {"id": "admin-rooms-confirm", "track": "admin", "caption": "Disabling a room with existing bookings doesn't happen silently \u2014 it asks first and names exactly how many meetings will be cancelled.", "screen": "confirm_dialog", "screen_data": {"title": "Confirm room disable", "message": "\"Meeting Room 1\" still has 3 upcoming booking(s). Disabling it will cancel these bookings and notify each affected member by email. Continue?", "submit_label": "Cancel these bookings and disable", "cancel_label": "Cancel", "danger": true}}, {"id": "bridge-settings", "track": "admin", "caption": "Click \u201cSystem settings\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": true}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-settings", "track": "admin", "caption": "Every rule that shapes booking and preemption \u2014 slot size, max length, the override protection window, the daily email cap \u2014 is a setting here, not a hardcoded constant.", "screen": "field_form", "screen_data": {"fields": [{"label": "Time slot size (minutes)", "type": "number", "value": "30", "help": "A booking's start and end time must be a multiple of this many minutes."}, {"label": "Max booking length (minutes)", "type": "number", "value": "240", "help": "The maximum length a single booking can last."}, {"label": "Override protection window (minutes)", "type": "number", "value": "120", "help": "How many minutes before a booking starts it becomes immune to override, even by a higher-level member."}, {"label": "Daily email cap", "type": "number", "value": "200", "help": "A safety margin below the email provider's daily free quota; when exceeded, the system drops reminder emails (E10) first."}], "submit_key": "admin.settings.save", "submit_label": "Save settings"}}, {"id": "bridge-bookings", "track": "admin", "caption": "Click \u201cAll bookings\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": true}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-bookings-log", "track": "admin", "caption": "Every booking across every room and every member, in one place, with a cancel action admins can use directly.", "screen": "table_list", "screen_data": {"heading": "All bookings", "columns": ["Room", "User", "Start time", "Status", ""], "rows": [{"cells": ["Meeting Room 1", "You", "14:00", "Confirmed"], "actions": [{"label": "Cancel booking"}]}]}}, {"id": "bridge-preemptions", "track": "admin", "caption": "Click \u201cOverride log\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": true}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-preemptions-log", "track": "admin", "caption": "This is the one screen where the overriding member's identity is shown \u2014 everywhere a member sees this themselves (a BLOCKED message, an email), the other party stays anonymous.", "screen": "table_list", "screen_data": {"heading": "Override log", "columns": ["Room", "Overridden member", "Overriding member"], "rows": [{"cells": ["Meeting Room 1", "Alex Wang (Sales)", "You (Engineering)"]}]}}, {"id": "bridge-emails", "track": "admin", "caption": "Click \u201cEmail log\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": true}, {"label": "Audit log", "hotspot": false}]}}, {"id": "admin-emails-log", "track": "admin", "caption": "Every email the system tried to send, with its outcome \u2014 this is also what backs the daily quota guard, which drops reminder emails first if the cap is close.", "screen": "table_list", "screen_data": {"heading": "Email log", "columns": ["Type", "Recipient", "Status"], "rows": [{"cells": ["E4", "you@example.com", "Sent"]}, {"cells": ["E5", "alex@example.com", "Sent"]}]}}, {"id": "bridge-audit", "track": "admin", "caption": "Click \u201cAudit log\u201d in the admin tabs.", "screen": "nav_click", "screen_data": {"items": [{"label": "Dashboard", "hotspot": false}, {"label": "Approvals", "hotspot": false}, {"label": "Members", "hotspot": false}, {"label": "Invitations", "hotspot": false}, {"label": "Rooms", "hotspot": false}, {"label": "All bookings", "hotspot": false}, {"label": "Override log", "hotspot": false}, {"label": "System settings", "hotspot": false}, {"label": "Email log", "hotspot": false}, {"label": "Audit log", "hotspot": true}]}}, {"id": "admin-audit-log", "track": "admin", "caption": "One more log, separate from the override log and the email log: a running record of every admin action across the whole system \u2014 level changes, approvals, room edits, setting changes \u2014 not just bookings and overrides.", "screen": "table_list", "screen_data": {"heading": "Audit log", "columns": ["Actor", "Action", "Target", "Detail"], "rows": [{"cells": ["You", "Level changed", "Alex Wang", "1 \u2192 3"]}, {"cells": ["You", "Setting changed", "daily_email_cap", "150 \u2192 200"]}]}}]</script>
+<script id="tutorial-track">member</script>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var mount = document.getElementById('tutorial-mount');
+  if (!mount) { return; }
+
+  var dataEl = document.getElementById('tutorial-steps');
+  var trackEl = document.getElementById('tutorial-track');
+  if (!dataEl || !trackEl) { return; }
+
+  var allSteps;
+  try {
+    allSteps = JSON.parse(dataEl.textContent);
+  } catch (err) {
+    return;
+  }
+  var defaultTrack = trackEl.textContent.trim();
+  var reduceMotion = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var state = { track: defaultTrack, index: 0 };
+
+  function stepsForTrack(track) {
+    return allSteps.filter(function (s) { return s.track === track; });
+  }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    attrs = attrs || {};
+    for (var key in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, key)) { continue; }
+      if (key === 'class') { node.className = attrs[key]; }
+      else if (key === 'text') { node.textContent = attrs[key]; }
+      else { node.setAttribute(key, attrs[key]); }
+    }
+    (children || []).forEach(function (child) { node.appendChild(child); });
+    return node;
+  }
+
+  function hotspotButton(label, extraClass) {
+    var cls = 'tutorial-hotspot' + (extraClass ? ' ' + extraClass : '');
+    return el('button', { type: 'button', class: cls, text: label });
+  }
+
+  // A generic "move on" button used by screens with no real submit/action
+  // of their own. Its label starts as "Continue" and render() corrects it
+  // to "Finish" when this turns out to be a track's last step -- computed
+  // once, centrally, rather than hand-marked on every screen (that's what
+  // skipped whole sections of content the first time around: a step
+  // wrongly authored as "last" jumped straight past everything after it).
+  function navButton() {
+    return hotspotButton('Continue', 'tutorial-nav-action');
+  }
+
+  function inertButton(label, extraClass) {
+    var cls = extraClass ? extraClass : 'secondary';
+    var btn = el('button', { type: 'button', class: cls, text: label });
+    btn.disabled = true;
+    return btn;
+  }
+
+  function renderFieldForm(data) {
+    var wrap = el('div', { class: 'panel stack tutorial-screen' });
+    if (data.notice) {
+      wrap.appendChild(el('div', { class: 'notice notice-info', text: data.notice }));
+    }
+    var form = el('form', { class: 'stack' });
+    data.fields.forEach(function (f) {
+      var field = el('div', { class: 'field' });
+      field.appendChild(el('label', { text: f.label }));
+      var inputAttrs = { type: f.type === 'textarea' || f.type === 'number' ? f.type : f.type, disabled: 'disabled' };
+      if (f.value) { inputAttrs.value = f.value; }
+      if (f.type === 'textarea') {
+        var ta = el('textarea', { disabled: 'disabled' });
+        if (f.value) { ta.textContent = f.value; }
+        field.appendChild(ta);
+      } else {
+        field.appendChild(el('input', inputAttrs));
+      }
+      if (f.help) { field.appendChild(el('small', { class: 'help', text: f.help })); }
+      form.appendChild(field);
+    });
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(hotspotButton(data.submit_label));
+    form.appendChild(actions);
+    wrap.appendChild(form);
+    return wrap;
+  }
+
+  function renderNoticePanel(data) {
+    var panel = el('div', { class: 'panel tutorial-screen' });
+    panel.appendChild(el('div', {
+      class: 'notice notice-' + (data.kind || 'info'), text: data.message,
+    }));
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderDayGridReadonly(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    panel.appendChild(el('div', { class: 'notice notice-warning', text: data.banner }));
+    var legend = el('div', { class: 'legend' });
+    (data.legend || []).forEach(function (text) {
+      legend.appendChild(el('span', { class: 'tag', text: text }));
+    });
+    panel.appendChild(legend);
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderSlotList(slots) {
+    var list = el('ul', { class: 'slot-list' });
+    slots.forEach(function (slot) {
+      var classes = ['slot'];
+      if (slot.kind === 'mine') { classes.push('is-mine'); }
+      if (slot.kind === 'other') { classes.push('is-booked'); }
+      if (slot.kind === 'start') { classes.push('is-start'); }
+      if (slot.kind === 'free' && slot.action_label) { classes.push('is-in-range'); }
+      var detail = el('div', { class: 'slot-detail' });
+      if (slot.detail) {
+        detail.appendChild(el('span', { class: 'slot-title', text: slot.detail }));
+      } else if (slot.kind === 'free') {
+        detail.appendChild(el('span', { class: 'slot-free', text: 'Free' }));
+      }
+      var row = el('li', { class: classes.join(' ') }, [
+        el('span', { class: 'slot-time', text: slot.time }),
+        detail,
+      ]);
+      if (slot.action_label) {
+        row.appendChild(hotspotButton(slot.action_label, 'slot-action'));
+      }
+      list.appendChild(row);
+    });
+    return list;
+  }
+
+  function renderDayGridInteractive(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    panel.appendChild(el('p', { class: 'tutorial-hint', text: data.hint }));
+    if (data.legend) {
+      var legend = el('div', { class: 'legend' });
+      data.legend.forEach(function (text) {
+        legend.appendChild(el('span', { class: 'tag', text: text }));
+      });
+      panel.appendChild(legend);
+    }
+    panel.appendChild(el('h3', { text: data.room }));
+    panel.appendChild(renderSlotList(data.slots));
+    return panel;
+  }
+
+  function renderWarningBlock(warning) {
+    var block = el('div', { class: 'confirm-panel' });
+    block.appendChild(el('h2', { text: warning.title }));
+    block.appendChild(el('p', { text: warning.message }));
+    var list = el('ul', { class: 'victim-list' });
+    (warning.victims || []).forEach(function (line) {
+      list.appendChild(el('li', { text: line }));
+    });
+    block.appendChild(list);
+    return block;
+  }
+
+  function renderBookingForm(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    if (data.warning) {
+      panel.appendChild(renderWarningBlock(data.warning));
+    }
+    var summary = data.summary;
+    panel.appendChild(el('p', {
+      text: summary.room + ' ・ ' + summary.time + ' (' + summary.duration + ')',
+    }));
+    panel.appendChild(el('p', { class: 'muted', text: data.change_time_label }));
+    var form = el('div', { class: 'stack' });
+    form.appendChild(el('p', { class: 'muted', text: data.pick_subject_label }));
+    var chips = el('div', { class: 'chips' });
+    data.presets.forEach(function (name) {
+      chips.appendChild(el('button', { type: 'button', class: 'chip', disabled: 'disabled', text: name }));
+    });
+    form.appendChild(chips);
+    var field = el('div', { class: 'field' });
+    field.appendChild(el('label', { text: data.custom_label }));
+    field.appendChild(el('input', { type: 'text', placeholder: data.custom_placeholder, disabled: 'disabled' }));
+    form.appendChild(field);
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(hotspotButton(data.submit_label));
+    form.appendChild(actions);
+    panel.appendChild(form);
+    return panel;
+  }
+
+  function renderConfirmDialog(data) {
+    var panel = el('div', { class: 'confirm-panel' });
+    if (data.title) { panel.appendChild(el('h2', { text: data.title })); }
+    if (data.message) { panel.appendChild(el('p', { text: data.message })); }
+    if (data.explain) { panel.appendChild(el('p', { text: data.explain })); }
+    if (data.note) { panel.appendChild(el('p', { class: 'muted', text: data.note })); }
+    if (data.victims) {
+      var list = el('ul', { class: 'victim-list' });
+      data.victims.forEach(function (line) { list.appendChild(el('li', { text: line })); });
+      panel.appendChild(list);
+    }
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(hotspotButton(data.submit_label, data.danger ? 'danger' : ''));
+    actions.appendChild(el('button', { type: 'button', class: 'secondary', text: data.cancel_label }));
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderListPanel(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    panel.appendChild(el('h3', { text: data.heading }));
+    var list = el('ul');
+    data.items.forEach(function (text) { list.appendChild(el('li', { text: text })); });
+    panel.appendChild(list);
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderDashboardPanel(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    panel.appendChild(el('h3', { text: data.title }));
+    data.stats.forEach(function (stat) {
+      var row = el('p');
+      row.appendChild(el('strong', { text: stat.label + ': ' }));
+      row.appendChild(document.createTextNode(stat.value));
+      panel.appendChild(row);
+    });
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderTableList(data) {
+    var panel = el('div', { class: 'stack tutorial-screen' });
+    panel.appendChild(el('h3', { text: data.heading }));
+    var table = el('table', {}, [
+      el('thead', {}, [
+        el('tr', {}, data.columns.map(function (c) { return el('th', { text: c }); })),
+      ]),
+    ]);
+    var tbody = el('tbody');
+    var hasHotspotRowAction = false;
+    data.rows.forEach(function (row) {
+      var tds = row.cells.map(function (cell) { return el('td', { text: cell }); });
+      if (row.status) {
+        tds.push(el('td', {}, [
+          el('span', { class: 'tag ' + (row.status.tag_class || ''), text: row.status.text }),
+        ]));
+      } else if (row.actions) {
+        var actionButtons = row.actions.map(function (a) {
+          if (a.hotspot) { hasHotspotRowAction = true; }
+          var cls = (a.hotspot ? 'tutorial-hotspot ' : '') + (a.danger ? 'danger' : 'secondary');
+          var btn = el('button', { type: 'button', class: cls.trim(), text: a.label });
+          if (!a.hotspot) { btn.disabled = true; }
+          return btn;
+        });
+        tds.push(el('td', {}, actionButtons));
+      }
+      tbody.appendChild(el('tr', {}, tds));
+    });
+    table.appendChild(tbody);
+    panel.appendChild(el('div', { class: 'table-wrap' }, [table]));
+    if (!hasHotspotRowAction) {
+      var actions = el('div', { class: 'actions' });
+      actions.appendChild(navButton());
+      panel.appendChild(actions);
+    }
+    return panel;
+  }
+
+  function renderHeaderPreview(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    var bar = el('div', { class: 'bar' });
+    bar.appendChild(el('span', { class: 'brand', text: data.brand }));
+    var navEl = el('nav', { class: 'site-nav' });
+    var ul = el('ul');
+    data.nav_items.forEach(function (label) {
+      ul.appendChild(el('li', {}, [inertButton(label)]));
+    });
+    ul.appendChild(el('li', {}, [
+      inertButton(data.admin_item + ' (admin only)', 'secondary'),
+    ]));
+    navEl.appendChild(ul);
+    bar.appendChild(navEl);
+    bar.appendChild(el('span', { class: 'account-name', text: data.account_name }));
+    bar.appendChild(inertButton(data.logout_label));
+    bar.appendChild(el('span', { class: 'muted', text: '🌐 ' + data.language_label }));
+    panel.appendChild(el('header', { class: 'site-header' }, [bar]));
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderDayOverview(data) {
+    var panel = el('div', { class: 'panel stack tutorial-screen' });
+    var dateBar = el('div', { class: 'date-bar' });
+    dateBar.appendChild(inertButton(data.prev_label));
+    dateBar.appendChild(inertButton(data.today_label));
+    dateBar.appendChild(el('span', { class: 'muted', text: data.date_label }));
+    dateBar.appendChild(inertButton(data.next_label));
+    panel.appendChild(dateBar);
+    var legend = el('div', { class: 'legend' });
+    data.legend.forEach(function (text) {
+      legend.appendChild(el('span', { class: 'tag', text: text }));
+    });
+    panel.appendChild(legend);
+    var jump = el('details', { class: 'jump', open: 'open' });
+    jump.appendChild(el('summary', { text: data.jump_label }));
+    var jumpList = el('ul', { class: 'jump-list' });
+    data.rooms.forEach(function (room) {
+      jumpList.appendChild(el('li', {}, [el('span', { text: room.name })]));
+    });
+    jump.appendChild(jumpList);
+    panel.appendChild(jump);
+    var grid = el('div', { class: 'day-grid cols-3' });
+    data.rooms.forEach(function (room) {
+      var col = el('div', { class: 'room-column' });
+      col.appendChild(el('h3', { text: room.name }));
+      col.appendChild(renderSlotList(room.slots));
+      grid.appendChild(col);
+    });
+    panel.appendChild(grid);
+    var actions = el('div', { class: 'actions' });
+    actions.appendChild(navButton());
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  function renderNavClick(data) {
+    var panel = el('div', { class: 'panel tutorial-screen' });
+    var navEl = el('nav', { class: 'site-nav' });
+    var ul = el('ul');
+    data.items.forEach(function (item) {
+      var control = item.hotspot ? hotspotButton(item.label) : inertButton(item.label);
+      ul.appendChild(el('li', {}, [control]));
+    });
+    navEl.appendChild(ul);
+    panel.appendChild(navEl);
+    return panel;
+  }
+
+  var RENDERERS = {
+    field_form: renderFieldForm,
+    notice_panel: renderNoticePanel,
+    day_grid_readonly: renderDayGridReadonly,
+    day_grid_interactive: renderDayGridInteractive,
+    booking_form: renderBookingForm,
+    confirm_dialog: renderConfirmDialog,
+    list_panel: renderListPanel,
+    dashboard_panel: renderDashboardPanel,
+    table_list: renderTableList,
+    header_preview: renderHeaderPreview,
+    day_overview: renderDayOverview,
+    nav_click: renderNavClick,
+  };
+
+  function advance() {
+    var steps = stepsForTrack(state.track);
+    if (state.index < steps.length - 1) {
+      state.index += 1;
+      render();
+    }
+  }
+
+  function back() {
+    if (state.index > 0) {
+      state.index -= 1;
+      render();
+    }
+  }
+
+  var trackToggleButtons = document.querySelectorAll('.tutorial-track-toggle');
+
+  // Keeps the two track buttons' own appearance in sync with state.track --
+  // without this, clicking one only ever changed the content below, never
+  // the buttons themselves, so there was no way to tell which was active.
+  function updateTrackToggles() {
+    trackToggleButtons.forEach(function (btn) {
+      var isActive = btn.dataset.track === state.track;
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      if (btn.disabled) { return; }
+      if (isActive) {
+        btn.classList.add('is-active');
+        btn.classList.remove('secondary');
+      } else {
+        btn.classList.remove('is-active');
+        btn.classList.add('secondary');
+      }
+    });
+  }
+
+  function setTrack(track) {
+    if (!stepsForTrack(track).length) { return; }
+    state.track = track;
+    state.index = 0;
+    updateTrackToggles();
+    render();
+  }
+
+  function render() {
+    var steps = stepsForTrack(state.track);
+    var step = steps[state.index];
+    mount.innerHTML = '';
+    if (!step) { return; }
+
+    var wrapper = el('div', {
+      class: 'tutorial-step' + (reduceMotion ? '' : ' tutorial-animate'),
+    });
+    wrapper.appendChild(el('p', { class: 'tutorial-progress',
+      text: 'Step ' + (state.index + 1) + ' of ' + steps.length }));
+    wrapper.appendChild(el('p', { class: 'tutorial-caption', text: step.caption }));
+
+    var renderer = RENDERERS[step.screen];
+    if (renderer) {
+      wrapper.appendChild(renderer(step.screen_data));
+    }
+
+    var isLast = state.index === steps.length - 1;
+    var navAction = wrapper.querySelector('.tutorial-nav-action');
+    if (navAction) {
+      navAction.textContent = isLast ? 'Finish' : 'Continue';
+    }
+
+    var nav = el('div', { class: 'tutorial-nav' });
+    var backBtn = el('button', { type: 'button', text: 'Back' });
+    backBtn.disabled = state.index === 0;
+    backBtn.addEventListener('click', back);
+    nav.appendChild(backBtn);
+    wrapper.appendChild(nav);
+
+    mount.appendChild(wrapper);
+
+    var hotspot = wrapper.querySelector('.tutorial-hotspot');
+    if (hotspot) {
+      if (isLast) {
+        hotspot.disabled = true;
+      } else {
+        hotspot.classList.add(reduceMotion ? '' : 'tutorial-pulse');
+        hotspot.addEventListener('click', advance);
+      }
+    }
+  }
+
+  trackToggleButtons.forEach(function (btn) {
+    if (btn.disabled) { return; }
+    btn.addEventListener('click', function () { setTrack(btn.dataset.track); });
+  });
+
+  updateTrackToggles();
+  render();
+})();
+</script>
+</body>
+</html>
