@@ -22,3 +22,10 @@ venv/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# 本機測試工具留下的東西。這個專案本身沒有用到 npm：瀏覽器測試需要的
+# Playwright 是由 CI 用 pip 裝的（python -m playwright install），
+# 這幾個檔案只是在本機跑測試時順手產生的，不屬於專案。
+node_modules/
+package.json
+package-lock.json
