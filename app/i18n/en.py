@@ -83,6 +83,7 @@ STRINGS: dict[str, str] = {
     "admin.closures.field_weekdays": "Days of the week",
     "admin.closures.field_reason": "Reason",
     "admin.closures.reason_help": "Optional. Members can see this.",
+    "common.list_separator": ", ",
     "admin.closures.weekday_0": "Mon",
     "admin.closures.weekday_1": "Tue",
     "admin.closures.weekday_2": "Wed",

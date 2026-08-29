@@ -87,6 +87,7 @@ STRINGS: dict[str, str] = {
     "admin.closures.field_weekdays": "星期",
     "admin.closures.field_reason": "原因",
     "admin.closures.reason_help": "選填。成員看得到這段文字。",
+    "common.list_separator": "、",
     "admin.closures.weekday_0": "一",
     "admin.closures.weekday_1": "二",
     "admin.closures.weekday_2": "三",

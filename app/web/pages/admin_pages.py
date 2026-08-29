@@ -1798,7 +1798,11 @@ def _closure_dates_label(closure: Any) -> str:
 def _closure_weekdays_label(closure: Any) -> str:
     if closure.is_every_day:
         return t("admin.closures.every_day")
-    return "、".join(t(f"admin.closures.weekday_{d}") for d in closure.weekdays)
+    # "、" is a CJK enumeration comma; joining English weekday names with it
+    # produces "Mon、Tue、Wed".
+    return t("common.list_separator").join(
+        t(f"admin.closures.weekday_{d}") for d in closure.weekdays
+    )
 
 
 def _closures_list(request: Request, extra: Any = None) -> Response:

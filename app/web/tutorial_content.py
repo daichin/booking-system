@@ -75,14 +75,19 @@ _COLLEAGUE_DEPT = "Sales"
 # Nav label sets, matching app/web/layout.py's _nav_items() and
 # app/web/pages/admin_pages.py's _ADMIN_NAV exactly, so a "click here" bridge
 # step always lists the same items in the same order as the real nav.
-_HEADER_LOGGED_OUT = [_t("nav.login"), _t("nav.register")]
-_HEADER_MEMBER = [_t("nav.day"), _t("nav.week"), _t("nav.my_bookings"), _t("nav.account")]
-_HEADER_ADMIN = _HEADER_MEMBER + [_t("nav.admin")]
+# The tutorial link sits last in every variant, and for an admin it comes
+# after "Admin" -- so these cannot be built by appending to one another.
+_HEADER_LOGGED_OUT = [_t("nav.login"), _t("nav.register"), _t("nav.tutorial")]
+_MEMBER_CORE = [
+    _t("nav.day"), _t("nav.week"), _t("nav.my_bookings"), _t("nav.account"),
+]
+_HEADER_MEMBER = _MEMBER_CORE + [_t("nav.tutorial")]
+_HEADER_ADMIN = _MEMBER_CORE + [_t("nav.admin"), _t("nav.tutorial")]
 _ADMIN_SUBNAV = [
     _t("admin.nav.dashboard"), _t("admin.nav.approvals"), _t("admin.nav.members"),
-    _t("admin.nav.invitations"), _t("admin.nav.rooms"), _t("admin.nav.bookings"),
-    _t("admin.nav.preemptions"), _t("admin.nav.settings"), _t("admin.nav.emails"),
-    _t("admin.nav.audit"),
+    _t("admin.nav.invitations"), _t("admin.nav.rooms"), _t("admin.nav.closures"),
+    _t("admin.nav.bookings"), _t("admin.nav.preemptions"), _t("admin.nav.settings"),
+    _t("admin.nav.emails"), _t("admin.nav.audit"),
 ]
 
 
@@ -319,6 +324,33 @@ _RAW_STEPS = [
                 {"time": "14:00–14:30", "kind": "free", "action_label": _t("day.pick_start")},
                 {"time": "14:30–15:00", "kind": "free"},
                 {"time": "15:00–15:30", "kind": "mine", "detail": "1:1 ・ You"},
+            ],
+        },
+    },
+    {
+        "id": "book-closed-slot",
+        "track": "member",
+        "caption": "Some slots are shut by an administrator — a cleaning "
+                   "window, maintenance, an all-hands. They say why, and they "
+                   "cannot be booked. A booking cannot run across one either, "
+                   "so the slots past it stop offering an end time.",
+        "screen": "day_grid_interactive",
+        "screen_data": {
+            "hint": _t("day.hint_pick_start"),
+            "room": _ROOM,
+            "legend": [
+                "day.legend.mine", "day.legend.other", "day.legend.free",
+                "day.legend.closed",
+            ],
+            "slots": [
+                {"time": "11:30–12:00", "kind": "free",
+                 "action_label": _t("day.pick_start")},
+                {"time": "12:00–12:30", "kind": "closed",
+                 "closed_label": _t("day.slot_closed"), "detail": "Deep clean"},
+                {"time": "12:30–13:00", "kind": "closed",
+                 "closed_label": _t("day.slot_closed"), "detail": "Deep clean"},
+                {"time": "13:00–13:30", "kind": "free",
+                 "action_label": _t("day.pick_start")},
             ],
         },
     },
@@ -733,6 +765,95 @@ _RAW_STEPS = [
         },
     },
     _nav_click_step(
+        "bridge-closures", "admin", _ADMIN_SUBNAV, _t("admin.nav.closures"),
+        "Click “" + _t("admin.nav.closures") + "” in the admin tabs.",
+    ),
+    {
+        "id": "admin-closures-form",
+        "track": "admin",
+        "caption": "Closing part of a day, rather than a whole room. One "
+                   "form covers a single afternoon or a six-week cleaning "
+                   "slot: leave the end date blank for one day, and untick "
+                   "Sat and Sun to close weekdays only.",
+        "screen": "field_form",
+        "screen_data": {
+            "fields": [
+                {"key": "admin.closures.field_room", "value": _ROOM},
+                {"key": "admin.closures.field_from_date", "type": "date",
+                 "value": "2026-08-15"},
+                {"key": "admin.closures.field_to_date", "type": "date",
+                 "value": "2026-10-01",
+                 "help_key": "admin.closures.to_date_help"},
+                {"key": "admin.closures.field_start_time", "value": "08:00"},
+                {"key": "admin.closures.field_end_time", "value": "10:00"},
+                {"key": "admin.closures.field_reason", "value": "Deep clean",
+                 "help_key": "admin.closures.reason_help"},
+            ],
+            "submit_key": "admin.closures.create",
+        },
+    },
+    {
+        "id": "admin-closures-conflict",
+        "track": "admin",
+        "caption": "If meetings already sit inside the hours you are closing, "
+                   "nothing happens yet — it stops and shows you which ones, "
+                   "so you can move the closure instead. Confirming cancels "
+                   "them and emails the people who booked them.",
+        "screen": "confirm_dialog",
+        "screen_data": {
+            "title": _t("admin.closures.confirm_title"),
+            "message": _t("admin.closures.confirm_body", count=2),
+            "submit_label": _t("admin.closures.confirm_button"),
+            "cancel_label": _t("day.cancel_selection"),
+            "danger": True,
+        },
+    },
+    {
+        "id": "admin-closures-list",
+        "track": "admin",
+        "caption": "A date range stays one row, not one row per day, so a "
+                   "seven-week closure is a single thing to read — and a "
+                   "single Delete to call the whole thing off.",
+        "screen": "table_list",
+        "screen_data": {
+            "heading": _t("admin.closures.title"),
+            "columns": [
+                _t("admin.closures.col_room"), _t("admin.closures.col_dates"),
+                _t("admin.closures.col_time"), _t("admin.closures.col_weekdays"),
+                _t("admin.closures.col_reason"), "",
+            ],
+            "rows": [
+                {
+                    "cells": [
+                        _ROOM,
+                        _t("admin.closures.date_range",
+                           from_date="2026-08-15", to_date="2026-10-01"),
+                        "08:00–10:00",
+                        _t("common.list_separator").join(
+                            _t(f"admin.closures.weekday_{d}") for d in range(5)
+                        ),
+                        "Deep clean",
+                    ],
+                    "actions": [
+                        {"label": _t("admin.closures.delete"), "danger": True},
+                    ],
+                },
+                {
+                    "cells": [
+                        _ROOM,
+                        _t("admin.closures.single_day", date="2026-08-31"),
+                        "12:00–15:00",
+                        _t("admin.closures.every_day"),
+                        "Maintenance",
+                    ],
+                    "actions": [
+                        {"label": _t("admin.closures.delete"), "danger": True},
+                    ],
+                },
+            ],
+        },
+    },
+    _nav_click_step(
         "bridge-settings", "admin", _ADMIN_SUBNAV, _t("admin.nav.settings"),
         "Click “" + _t("admin.nav.settings") + "” in the admin tabs.",
     ),
@@ -814,17 +935,25 @@ _RAW_STEPS = [
         "track": "admin",
         "caption": "Every email the system tried to send, with its outcome — "
                    "this is also what backs the daily quota guard, which "
-                   "drops reminder emails first if the cap is close.",
+                   "drops reminder emails first if the cap is close. If "
+                   "somebody deleted a message, Resend sends it again; a "
+                   "failed one retries by itself.",
         "screen": "table_list",
         "screen_data": {
             "heading": _t("admin.emails.title"),
             "columns": [
                 _t("admin.emails.col_type"), _t("admin.emails.col_to"),
-                _t("admin.emails.col_status"),
+                _t("admin.emails.col_status"), _t("admin.emails.col_actions"),
             ],
             "rows": [
-                {"cells": ["E4", "you@example.com", _t("admin.emails.status_sent")]},
-                {"cells": ["E5", "alex@example.com", _t("admin.emails.status_sent")]},
+                {
+                    "cells": ["E4", "you@example.com", _t("admin.emails.status_sent")],
+                    "actions": [{"label": _t("admin.emails.resend")}],
+                },
+                {
+                    "cells": ["E5", "alex@example.com", _t("admin.emails.status_sent")],
+                    "actions": [{"label": _t("admin.emails.resend")}],
+                },
             ],
         },
     },
@@ -986,9 +1115,15 @@ TUTORIAL_SCRIPT = """
       if (slot.kind === 'mine') { classes.push('is-mine'); }
       if (slot.kind === 'other') { classes.push('is-booked'); }
       if (slot.kind === 'start') { classes.push('is-start'); }
+      if (slot.kind === 'closed') { classes.push('is-closed'); }
       if (slot.kind === 'free' && slot.action_label) { classes.push('is-in-range'); }
       var detail = el('div', { class: 'slot-detail' });
-      if (slot.detail) {
+      if (slot.kind === 'closed') {
+        detail.appendChild(el('span', { class: 'slot-closed', text: slot.closed_label }));
+        if (slot.detail) {
+          detail.appendChild(el('span', { class: 'slot-owner', text: slot.detail }));
+        }
+      } else if (slot.detail) {
         detail.appendChild(el('span', { class: 'slot-title', text: slot.detail }));
       } else if (slot.kind === 'free') {
         detail.appendChild(el('span', { class: 'slot-free', text: 'Free' }));
